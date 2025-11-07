@@ -315,6 +315,7 @@ export default function Home() {
   const [corruptionPhase, setCorruptionPhase] = useState<'controlled' | 'chaos' | 'art'>('controlled')
   const [backgroundArt, setBackgroundArt] = useState<string[]>([])
   const [corruptionSpeed, setCorruptionSpeed] = useState(200)
+  const [phaseIntensity, setPhaseIntensity] = useState(0) // 0 to 1, smooth transition
   const containerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -326,26 +327,46 @@ export default function Home() {
         setCorruptedLines([...displayedLines])
       }, 1000)
       
-      // Create a cyclic yin-yang effect - chaos and order
+      // Create a smooth cyclic yin-yang effect - chaos and order
       let phase = 0
+      let intensity = 0
+      let intensityDirection = 1 // 1 for ramping up, -1 for ramping down
+      
       const cyclePhases = () => {
         const phases = [
-          { type: 'controlled', speed: 200 },  // Order
-          { type: 'chaos', speed: 100 },       // Chaos
-          { type: 'art', speed: 50 },          // Beautiful chaos
-          { type: 'controlled', speed: 150 },  // Back to order
+          { type: 'controlled', speed: 200, duration: 5000 },  // Order - 5 seconds
+          { type: 'chaos', speed: 100, duration: 6000 },       // Chaos - 6 seconds
+          { type: 'art', speed: 50, duration: 7000 },          // Beautiful chaos - 7 seconds
+          { type: 'controlled', speed: 150, duration: 5000 },  // Back to order - 5 seconds
         ]
         
-        phase = (phase + 1) % phases.length
-        setCorruptionPhase(phases[phase].type as any)
-        setCorruptionSpeed(phases[phase].speed)
+        const currentPhase = phases[phase]
+        
+        // Smooth intensity transition
+        intensity += intensityDirection * 0.05 // Gradual ramp
+        intensity = Math.max(0, Math.min(1, intensity)) // Clamp between 0 and 1
+        
+        setPhaseIntensity(intensity)
+        
+        // When intensity reaches 1, we're fully in the phase
+        // When it reaches 0, transition to next phase
+        if (intensity >= 1 && intensityDirection === 1) {
+          intensityDirection = -1 // Start ramping down
+        } else if (intensity <= 0 && intensityDirection === -1) {
+          // Move to next phase
+          phase = (phase + 1) % phases.length
+          intensityDirection = 1 // Start ramping up
+          setCorruptionPhase(phases[phase].type as any)
+          setCorruptionSpeed(phases[phase].speed)
+        }
       }
       
-      // Switch phases every 3 seconds for a continuous cycle
-      const phaseInterval = setInterval(cyclePhases, 3000)
+      // Smooth transition every 50ms for gradual effect
+      const phaseInterval = setInterval(cyclePhases, 50)
       
-      // Start with first phase change after 2 seconds
-      setTimeout(cyclePhases, 2000)
+      // Start with first phase
+      setCorruptionPhase('controlled')
+      setPhaseIntensity(0)
       
       return () => clearInterval(phaseInterval)
     }
@@ -382,14 +403,16 @@ export default function Home() {
         // Phase-based corruption
         if (corruptionPhase === 'controlled') {
           return prev.map((line) => {
-            if (Math.random() < 0.3) {
+            // Use inverse intensity - more order when intensity is low
+            const corruptionChance = 0.3 * (1 - phaseIntensity)
+            if (Math.random() < corruptionChance) {
               return controlledCorruption(line, isLastLineXLink(line))
             }
             return line
           })
         } else if (corruptionPhase === 'chaos') {
-          // Chaos phase
-          const intensity = Math.min((Date.now() % 10000) / 10000, 1) // Increasing intensity
+          // Chaos phase - use smooth phase intensity
+          const intensity = phaseIntensity
           
           // Randomly add new lines with increasing frequency (but not X link)
           if (Math.random() < 0.2 * intensity) {
@@ -407,8 +430,8 @@ export default function Home() {
             return line
           }).slice(-15) // Keep only last 15 lines to prevent overflow
         } else {
-          // Art phase - generate beautiful patterns
-          const intensity = 1
+          // Art phase - generate beautiful patterns with smooth intensity
+          const intensity = phaseIntensity
           
           // Generate beautiful background patterns
           if (Math.random() < 0.7) {
@@ -440,7 +463,7 @@ export default function Home() {
     }, corruptionSpeed)
 
     return () => clearInterval(interval)
-  }, [showCorruption, corruptionPhase, corruptionSpeed])
+  }, [showCorruption, corruptionPhase, corruptionSpeed, phaseIntensity])
 
   return (
     <main 
