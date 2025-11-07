@@ -391,7 +391,7 @@ export default function Home() {
           // Chaos phase
           const intensity = Math.min((Date.now() % 10000) / 10000, 1) // Increasing intensity
           
-          // Randomly add new lines with increasing frequency
+          // Randomly add new lines with increasing frequency (but not X link)
           if (Math.random() < 0.2 * intensity) {
             const newLine = Array(Math.floor(Math.random() * 30))
               .fill(0)
@@ -478,60 +478,44 @@ export default function Home() {
         position: 'relative',
         zIndex: 1
       }}>
-        {(showCorruption ? corruptedLines : displayedLines).filter(line => !line.includes('x.com/LazyShivam')).map((line, index) => {
+        {(showCorruption ? corruptedLines : displayedLines).map((line, index) => {
+          const isXLink = line.includes('x.com/LazyShivam')
           return (
             <div 
               key={index} 
               className="line" 
               style={{
-                transform: corruptionPhase !== 'controlled' && Math.random() < 0.4 
+                transform: !isXLink && corruptionPhase !== 'controlled' && Math.random() < 0.4 
                   ? `translateX(${Math.random() * 40 - 20}px) rotate(${Math.random() * 10 - 5}deg) scaleX(${0.8 + Math.random() * 0.4})` 
                   : 'none',
-                fontSize: corruptionPhase === 'art' && Math.random() < 0.5 
+                fontSize: !isXLink && corruptionPhase === 'art' && Math.random() < 0.5 
                   ? `${10 + Math.random() * 20}px` 
                   : '14px',
-                opacity: corruptionPhase === 'art' ? 0.4 + Math.random() * 0.6 : 1,
-                filter: corruptionPhase === 'art' && Math.random() < 0.3 ? 'blur(1px)' : 'none'
+                opacity: isXLink ? 1 : (corruptionPhase === 'art' ? 0.4 + Math.random() * 0.6 : 1),
+                filter: !isXLink && corruptionPhase === 'art' && Math.random() < 0.3 ? 'blur(1px)' : 'none'
               }}
             >
-              <span className="text">{line}</span>
+              {isXLink ? (
+                <a href="https://x.com/LazyShivam" target="_blank" rel="noopener noreferrer" style={{ 
+                  color: '#79b8ff', 
+                  textDecoration: 'underline',
+                  fontSize: '14px',
+                  fontWeight: 'normal'
+                }}>
+                  {line}
+                </a>
+              ) : (
+                <span className="text">{line}</span>
+              )}
             </div>
           )
         })}
-        {isTyping && !currentText.includes('x.com/LazyShivam') && (
+        {isTyping && (
           <div className="line">
             <span className="text">{currentText}</span>
             <span className="cursor">_</span>
           </div>
         )}
-        
-        {/* Permanent X link - always visible, always blue, never corrupted */}
-        <div className="line" style={{
-          position: showCorruption ? 'fixed' : 'relative',
-          bottom: showCorruption ? '40px' : 'auto',
-          left: showCorruption ? '20px' : 'auto',
-          zIndex: 1000,
-          backgroundColor: showCorruption ? 'rgba(10, 10, 10, 0.9)' : 'transparent',
-          padding: showCorruption ? '10px 20px' : '0',
-          borderRadius: showCorruption ? '5px' : '0',
-          border: showCorruption ? '1px solid #79b8ff' : 'none'
-        }}>
-          <a href="https://x.com/LazyShivam" target="_blank" rel="noopener noreferrer" style={{ 
-            color: '#79b8ff', 
-            textDecoration: 'underline',
-            fontSize: '14px',
-            fontWeight: showCorruption ? 'bold' : 'normal'
-          }}>
-            {isTyping && currentText.includes('x.com/LazyShivam') ? (
-              <>
-                {currentText}
-                <span className="cursor" style={{ color: '#79b8ff' }}>_</span>
-              </>
-            ) : (
-              '> ask him -> x.com/LazyShivam'
-            )}
-          </a>
-        </div>
       </div>
     </main>
   )
