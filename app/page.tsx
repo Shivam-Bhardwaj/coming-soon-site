@@ -203,60 +203,116 @@ function generateBeautifulPattern(): string[] {
   return selectedPattern()
 }
 
-// --- NEW: Aggressive Fungal Colony Growth Algorithm ---
-function growFungus(grid: string[][], intensity: number): string[][] {
+// --- Biological Growth Types ---
+type GrowthType = 'fungus' | 'slime' | 'mold' | 'mycelium' | 'algae';
+
+interface GrowthColony {
+  type: GrowthType;
+  cells: [number, number][];
+  age: number;
+  spreadRate: number;
+}
+
+const growthPatterns: Record<GrowthType, string[]> = {
+  fungus: ['·', '•', '◦', '◉', '◯', '○', '●', '◐', '◑', '◒', '◓'],
+  slime: ['~', '≈', '≋', '∿', '∼', '∽', '≁', '≃'],
+  mold: ['░', '▒', '▓', '█', '▄', '▀', '▌', '▐'],
+  mycelium: ['─', '━', '═', '╌', '╍', '╎', '╏', '│', '┃', '║'],
+  algae: ['*', '✱', '✲', '✳', '✴', '✵', '✶', '✷', '✸', '✹', '✺', '✻', '✼', '✽', '✾', '✿', '❀', '❁', '❂', '❃', '❄', '❅', '❆', '❇', '❈', '❉', '❊', '❋']
+};
+
+// --- Multi-Colony Biological Takeover System ---
+function growBiologicalColonies(grid: string[][], intensity: number, colonies: GrowthColony[]): { grid: string[][], colonies: GrowthColony[] } {
   const newGrid = grid.map(row => [...row]);
   const rows = newGrid.length;
   const cols = newGrid[0].length;
   
-  // Simple dots for fungus: ., ·, •
-  const dots = ['.', '·', '•'];
+  let activeColonies = [...colonies];
   
-  // Find all existing fungus cells
-  const fungusCells: [number, number][] = [];
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      if (newGrid[r][c] !== ' ') {
-        fungusCells.push([r, c]);
-      }
-    }
-  }
-  
-  // If no fungus exists, create seed points (multiple starting colonies)
-  if (fungusCells.length === 0) {
-    const seedCount = Math.floor(intensity * 5) + 3; // At least 3 seeds
-    for (let i = 0; i < seedCount; i++) {
-      const r = Math.floor(Math.random() * rows);
-      const c = Math.floor(Math.random() * cols);
-      newGrid[r][c] = dots[0];
-      fungusCells.push([r, c]);
-    }
-  }
-  
-  // Aggressive spreading from all existing fungus cells
-  const spreadRate = Math.max(0.4, intensity * 0.8); // Much more aggressive
-  fungusCells.forEach(([r, c]) => {
-    // Check all 8 neighbors (including diagonals for organic spread)
-    const neighbors = [
-      [r-1, c-1], [r-1, c], [r-1, c+1],
-      [r, c-1],             [r, c+1],
-      [r+1, c-1], [r+1, c], [r+1, c+1]
-    ];
+  // Initialize colonies if none exist - strategic placement
+  if (activeColonies.length === 0) {
+    const colonyTypes: GrowthType[] = ['fungus', 'slime', 'mold', 'mycelium', 'algae'];
+    const seedCount = Math.min(5, Math.floor(intensity * 8) + 3);
     
-    neighbors.forEach(([nr, nc]) => {
-      if (nr >= 0 && nr < rows && nc >= 0 && nc < cols) {
-        if (newGrid[nr][nc] === ' ' && Math.random() < spreadRate) {
-          // Spread to empty cell
-          newGrid[nr][nc] = dots[Math.floor(Math.random() * dots.length)];
-        } else if (newGrid[nr][nc] !== ' ' && Math.random() < spreadRate * 0.3) {
-          // Densify existing fungus
-          newGrid[nr][nc] = dots[Math.min(2, dots.indexOf(newGrid[nr][nc]) + 1) || 0];
+    for (let i = 0; i < seedCount; i++) {
+      const type = colonyTypes[i % colonyTypes.length];
+      // Strategic placement: corners and edges
+      let r, c;
+      if (i === 0) { r = 0; c = 0; } // Top-left
+      else if (i === 1) { r = 0; c = cols - 1; } // Top-right
+      else if (i === 2) { r = rows - 1; c = 0; } // Bottom-left
+      else if (i === 3) { r = rows - 1; c = cols - 1; } // Bottom-right
+      else { r = Math.floor(Math.random() * rows); c = Math.floor(Math.random() * cols); }
+      
+      const patterns = growthPatterns[type];
+      newGrid[r][c] = patterns[0];
+      activeColonies.push({
+        type,
+        cells: [[r, c]],
+        age: 0,
+        spreadRate: 0.3 + Math.random() * 0.4
+      });
+    }
+  }
+  
+  // Grow each colony aggressively
+  activeColonies = activeColonies.map(colony => {
+    const patterns = growthPatterns[colony.type];
+    const newCells: [number, number][] = [];
+    
+    // Each cell in colony spreads
+    colony.cells.forEach(([r, c]) => {
+      // 8-directional spread for organic growth
+      const neighbors = [
+        [r-1, c-1], [r-1, c], [r-1, c+1],
+        [r, c-1],             [r, c+1],
+        [r+1, c-1], [r+1, c], [r+1, c+1]
+      ];
+      
+      neighbors.forEach(([nr, nc]) => {
+        if (nr >= 0 && nr < rows && nc >= 0 && nc < cols) {
+          const cellValue = newGrid[nr][nc];
+          const isEmpty = cellValue === ' ';
+          const isSameType = cellValue !== ' ' && patterns.includes(cellValue);
+          
+          // Aggressive spread rate based on intensity and colony age
+          const effectiveSpreadRate = colony.spreadRate * (1 + intensity * 0.5) * (1 + colony.age * 0.01);
+          
+          if (isEmpty && Math.random() < effectiveSpreadRate) {
+            // New growth
+            newGrid[nr][nc] = patterns[Math.floor(Math.random() * patterns.length)];
+            newCells.push([nr, nc]);
+          } else if (isSameType && Math.random() < effectiveSpreadRate * 0.4) {
+            // Densify existing growth
+            const currentIndex = patterns.indexOf(cellValue);
+            if (currentIndex < patterns.length - 1) {
+              newGrid[nr][nc] = patterns[currentIndex + 1];
+            }
+          }
         }
+      });
+    });
+    
+    return {
+      ...colony,
+      cells: [...colony.cells, ...newCells],
+      age: colony.age + 1
+    };
+  });
+  
+  // Colonies can merge or compete
+  // Remove duplicate cells (when colonies meet)
+  const allCells = new Map<string, GrowthType>();
+  activeColonies.forEach(colony => {
+    colony.cells.forEach(([r, c]) => {
+      const key = `${r},${c}`;
+      if (!allCells.has(key)) {
+        allCells.set(key, colony.type);
       }
     });
   });
   
-  return newGrid;
+  return { grid: newGrid, colonies: activeColonies };
 }
 
 
@@ -393,6 +449,7 @@ export default function Home() {
   const [backgroundArt, setBackgroundArt] = useState<string[]>([])
   const [sprites, setSprites] = useState<Sprite[]>([]);
   const [fungusGrid, setFungusGrid] = useState<string[][]>([]);
+  const [biologicalColonies, setBiologicalColonies] = useState<GrowthColony[]>([]);
 
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -408,10 +465,11 @@ export default function Home() {
       setTimeout(() => {
         setShowCorruption(true)
         setCorruptedLines([...messages])
-        // Initialize fungus grid
-        const cols = Math.floor(window.innerWidth / 8);
-        const rows = Math.floor(window.innerHeight / 16);
+        // Initialize high-density biological grid (finer for better utilization)
+        const cols = Math.floor(window.innerWidth / 6); // Finer grid
+        const rows = Math.floor(window.innerHeight / 12); // Finer grid
         setFungusGrid(Array(rows).fill(null).map(() => Array(cols).fill(' ')));
+        setBiologicalColonies([]); // Start with no colonies - biology takes over gradually
       }, 1200)
       
       return
@@ -474,9 +532,11 @@ export default function Home() {
             return line
           })
         } else if (currentPhase === 'chaos') {
-          // Fungus also grows in chaos phase for better space utilization
-          if (Math.random() < effectiveIntensity * 0.5) {
-            setFungusGrid(grid => growFungus(grid, effectiveIntensity * 0.7))
+          // Biology starts taking over in chaos phase
+          if (Math.random() < effectiveIntensity * 0.6) {
+            const result = growBiologicalColonies(fungusGrid, effectiveIntensity * 0.8, biologicalColonies);
+            setFungusGrid(result.grid);
+            setBiologicalColonies(result.colonies);
           }
           
           // More aggressive in showcase mode
@@ -493,9 +553,11 @@ export default function Home() {
             }
             return line
           }).slice(-15)
-        } else { // Art phase
-          // Aggressive fungus growth - always grow in art phase
-          setFungusGrid(grid => growFungus(grid, effectiveIntensity))
+        } else { // Art phase - Biology fully takes over
+          // Aggressive biological takeover - always grow in art phase
+          const result = growBiologicalColonies(fungusGrid, effectiveIntensity, biologicalColonies);
+          setFungusGrid(result.grid);
+          setBiologicalColonies(result.colonies);
           
           // Ensure art patterns are visible in showcase
           if (Math.random() < effectiveIntensity || (isShowcase && Math.random() < 0.3)) {
