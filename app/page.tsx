@@ -766,7 +766,7 @@ export default function Home() {
     resizeCanvas()
     window.addEventListener('resize', resizeCanvas)
 
-    // Pixel-based biological entities
+    // Pixel-based biological entities with competitive ecosystem
     interface PixelOrganism {
       x: number
       y: number
@@ -778,7 +778,12 @@ export default function Home() {
       color: string
       trail: { x: number; y: number; opacity: number }[]
       energy: number
+      population: number // Track population of this type
+      territory: number // Territory size
     }
+    
+    // Resource map - pixels as resources
+    const resourceMap = new Map<string, number>() // Track resource availability per pixel
 
     const organisms: PixelOrganism[] = []
     let growthMap = new Map<string, number | string>() // Track growth intensity and colors per pixel
@@ -796,9 +801,28 @@ export default function Home() {
       decay: ['#4b0082', '#8b008b', '#9400d3'] // Purple decay
     }
 
-    // Initialize organisms
+    // Count populations by type
+    const getPopulationCount = (type: PixelOrganism['type']) => {
+      return organisms.filter(o => o.type === type).length
+    }
+    
+    // Initialize organisms with competitive traits
     const spawnOrganism = (type: PixelOrganism['type'], x?: number, y?: number) => {
       const baseSpeed = type === 'fly' ? 1.2 : type === 'beetle' ? 0.8 : type === 'worm' ? 0.3 : 0.5
+      const population = getPopulationCount(type)
+      
+      // Resource requirements vary by type
+      const resourceNeeds = {
+        spore: 5,
+        mycelium: 8,
+        insect: 10,
+        slime: 12,
+        beetle: 15,
+        mite: 3,
+        worm: 7,
+        fly: 6
+      }
+      
       organisms.push({
         x: x ?? Math.random() * canvas.width,
         y: y ?? Math.random() * canvas.height,
@@ -809,11 +833,21 @@ export default function Home() {
         age: 0,
         color: colors[type][Math.floor(Math.random() * colors[type].length)],
         trail: [],
-        energy: 100
+        energy: 50 + Math.random() * 50, // Start with variable energy
+        population,
+        territory: resourceNeeds[type]
       })
     }
 
-    // Spawn initial organisms at edges - more diverse ecosystem
+    // Initialize resource map
+    for (let x = 0; x < canvas.width; x += 10) {
+      for (let y = 0; y < canvas.height; y += 10) {
+        resourceMap.set(`${x},${y}`, 50 + Math.random() * 50) // Initial resources
+      }
+    }
+    
+    // Spawn initial organisms at edges - diverse ecosystem, Game of Life start
+    const initialTypes: PixelOrganism['type'][] = ['spore', 'mycelium', 'insect', 'slime', 'beetle', 'mite', 'worm', 'fly']
     for (let i = 0; i < 40; i++) {
       const side = Math.floor(Math.random() * 4)
       let x = 0, y = 0
@@ -822,32 +856,60 @@ export default function Home() {
       else if (side === 2) { x = Math.random() * canvas.width; y = 0 } // Top
       else { x = Math.random() * canvas.width; y = canvas.height } // Bottom
       
-      const types: PixelOrganism['type'][] = ['spore', 'mycelium', 'insect', 'slime', 'beetle', 'mite', 'worm', 'fly']
-      spawnOrganism(types[Math.floor(Math.random() * types.length)], x, y)
+      spawnOrganism(initialTypes[Math.floor(Math.random() * initialTypes.length)], x, y)
     }
 
-    // Organic growth function - pixel-based with creepy effects
-    const growPixel = (x: number, y: number, intensity: number, color: string) => {
+    // Organic growth function - pixel-based with resource competition
+    const growPixel = (x: number, y: number, intensity: number, color: string, organism?: PixelOrganism) => {
       const px = Math.floor(x)
       const py = Math.floor(y)
       if (px < 0 || px >= canvas.width || py < 0 || py >= canvas.height) return
 
       const key = `${px},${py}`
       const currentIntensity = (growthMap.get(key) as number) || 0
-      const newIntensity = Math.min(255, currentIntensity + intensity * 30) // Doubled growth speed
-
+      
+      // Check resource availability - competition for space
+      const resourceAvailable = resourceMap.get(key) || 100
+      if (resourceAvailable < 10 && currentIntensity > 50) {
+        // Resource depleted, growth slows
+        return
+      }
+      
+      const newIntensity = Math.min(255, currentIntensity + intensity * 30)
       growthMap.set(key, newIntensity)
+      
+      // Consume resources
+      if (organism) {
+        const resourceCost = intensity * 2
+        const currentResource = resourceMap.get(key) || 100
+        resourceMap.set(key, Math.max(0, currentResource - resourceCost))
+      }
       
       // Store color info with intensity
       const colorKey = key + '_color'
       if (!growthMap.has(colorKey)) {
         growthMap.set(colorKey, color)
       } else {
-        // Blend colors for organic mixing
+        // Blend colors for organic mixing - competition shows as color mixing
         const existingColor = growthMap.get(colorKey) as string
         if (Math.random() < 0.3) {
           growthMap.set(colorKey, color) // Sometimes override for variation
         }
+      }
+    }
+    
+    // Regenerate resources slowly
+    const regenerateResources = () => {
+      resourceMap.forEach((resource, key) => {
+        if (resource < 100) {
+          resourceMap.set(key, Math.min(100, resource + 0.5))
+        }
+      })
+      // Add new resource points occasionally
+      if (Math.random() < 0.01) {
+        const x = Math.floor(Math.random() * canvas.width)
+        const y = Math.floor(Math.random() * canvas.height)
+        resourceMap.set(`${x},${y}`, 100)
       }
     }
 
@@ -910,11 +972,74 @@ export default function Home() {
         }
       })
 
-      // Update and render organisms
+      // Regenerate resources
+      regenerateResources()
+      
+      // Update population counts
+      organisms.forEach(org => {
+        org.population = getPopulationCount(org.type)
+      })
+      
+      // Competitive interactions - organisms compete for resources and space
       organisms.forEach((org, idx) => {
+        // Check for nearby competitors
+        organisms.forEach((other, otherIdx) => {
+          if (idx === otherIdx) return
+          
+          const dx = other.x - org.x
+          const dy = other.y - org.y
+          const dist = Math.sqrt(dx * dx + dy * dy)
+          
+          // Competition radius
+          if (dist < 20) {
+            // Same type - cooperation (slight energy boost)
+            if (org.type === other.type) {
+              if (org.population < 50) { // Don't overpopulate
+                org.energy += 0.05
+              }
+            } else {
+              // Different types - competition
+              const competitionStrength = {
+                beetle: 2, // Beetles are strong competitors
+                fly: 0.5,  // Flies are weak
+                mite: 0.3, // Mites are very weak
+                worm: 1,
+                insect: 1.2,
+                slime: 1.5,
+                spore: 0.8,
+                mycelium: 1.3
+              }
+              
+              const orgStrength = competitionStrength[org.type] || 1
+              const otherStrength = competitionStrength[other.type] || 1
+              
+              // Weaker organism loses energy
+              if (orgStrength < otherStrength) {
+                org.energy -= 0.2
+              } else if (orgStrength > otherStrength) {
+                org.energy += 0.1 // Stronger gains energy
+              }
+              
+              // Predation - some organisms eat others
+              if (org.type === 'beetle' && (other.type === 'mite' || other.type === 'insect')) {
+                if (dist < 5 && Math.random() < 0.1) {
+                  org.energy = Math.min(100, org.energy + 20)
+                  organisms.splice(otherIdx, 1)
+                }
+              }
+              if (org.type === 'insect' && other.type === 'mite') {
+                if (dist < 3 && Math.random() < 0.15) {
+                  org.energy = Math.min(100, org.energy + 10)
+                  organisms.splice(otherIdx, 1)
+                }
+              }
+            }
+          }
+        })
+        
         // Movement with organic patterns - different behaviors per type
         org.age++
-        org.energy -= 0.1
+        org.energy -= 0.15 // Base energy consumption
         
         if (org.type === 'fly') {
           // Erratic fly movement
@@ -954,115 +1079,138 @@ export default function Home() {
         org.x = Math.max(0, Math.min(canvas.width, org.x + org.vx))
         org.y = Math.max(0, Math.min(canvas.height, org.y + org.vy))
 
-        // Leave growth trail - more aggressive and creepy
-        if (org.type === 'spore' || org.type === 'mycelium') {
-          growPixel(org.x, org.y, 1.5, org.color) // Increased growth intensity
-          // Spread from organism in organic patterns - more aggressive
-          for (let i = 0; i < 8; i++) {
-            const angle = Math.random() * Math.PI * 2
-            const dist = Math.random() * 6
-            growPixel(
-              org.x + Math.cos(angle) * dist,
-              org.y + Math.sin(angle) * dist,
-              0.6,
-              org.color
-            )
-          }
-          // Tendril-like growth - more frequent
-          if (Math.random() < 0.5) {
-            const tendrilAngle = Math.atan2(org.vy, org.vx)
-            for (let i = 0; i < 5; i++) {
+        // Check resource availability at current location
+        const resourceKey = `${Math.floor(org.x)},${Math.floor(org.y)}`
+        const localResource = resourceMap.get(resourceKey) || 100
+        
+        // Consume resources for survival
+        if (localResource > 0) {
+          const consumption = 0.5
+          resourceMap.set(resourceKey, Math.max(0, localResource - consumption))
+          org.energy = Math.min(100, org.energy + consumption * 0.2)
+        } else {
+          // No resources - lose energy faster
+          org.energy -= 0.3
+        }
+        
+        // Leave growth trail - more aggressive and creepy (only if has energy)
+        if (org.energy > 20) {
+          if (org.type === 'spore' || org.type === 'mycelium') {
+            growPixel(org.x, org.y, 1.5, org.color, org) // Pass organism for resource tracking
+            // Spread from organism in organic patterns - more aggressive
+            for (let i = 0; i < 8; i++) {
+              const angle = Math.random() * Math.PI * 2
+              const dist = Math.random() * 6
               growPixel(
-                org.x + Math.cos(tendrilAngle + (i - 2) * 0.2) * (3 + i),
-                org.y + Math.sin(tendrilAngle + (i - 2) * 0.2) * (3 + i),
+                org.x + Math.cos(angle) * dist,
+                org.y + Math.sin(angle) * dist,
+                0.6,
+                org.color,
+                org
+              )
+            }
+            // Tendril-like growth - more frequent
+            if (Math.random() < 0.5) {
+              const tendrilAngle = Math.atan2(org.vy, org.vx)
+              for (let i = 0; i < 5; i++) {
+                growPixel(
+                  org.x + Math.cos(tendrilAngle + (i - 2) * 0.2) * (3 + i),
+                  org.y + Math.sin(tendrilAngle + (i - 2) * 0.2) * (3 + i),
+                  0.5,
+                  org.color,
+                  org
+                )
+              }
+            }
+          }
+          
+          // Worms leave thick trails
+          if (org.type === 'worm') {
+            growPixel(org.x, org.y, 1.2, org.color, org)
+            for (let i = 0; i < 6; i++) {
+              const angle = Math.random() * Math.PI * 2
+              const dist = Math.random() * 3
+              growPixel(
+                org.x + Math.cos(angle) * dist,
+                org.y + Math.sin(angle) * dist,
                 0.5,
-                org.color
+                org.color,
+                org
               )
             }
           }
-        }
-        
-        // Worms leave thick trails
-        if (org.type === 'worm') {
-          growPixel(org.x, org.y, 1.2, org.color)
-          for (let i = 0; i < 6; i++) {
-            const angle = Math.random() * Math.PI * 2
-            const dist = Math.random() * 3
-            growPixel(
-              org.x + Math.cos(angle) * dist,
-              org.y + Math.sin(angle) * dist,
-              0.5,
-              org.color
-            )
+          
+          // Beetles leave strong growth patterns
+          if (org.type === 'beetle') {
+            growPixel(org.x, org.y, 1.0, org.color, org)
+            for (let i = 0; i < 4; i++) {
+              const angle = (Math.PI * 2 / 4) * i
+              growPixel(
+                org.x + Math.cos(angle) * 2,
+                org.y + Math.sin(angle) * 2,
+                0.4,
+                org.color,
+                org
+              )
+            }
           }
-        }
-        
-        // Beetles leave strong growth patterns
-        if (org.type === 'beetle') {
-          growPixel(org.x, org.y, 1.0, org.color)
-          for (let i = 0; i < 4; i++) {
-            const angle = (Math.PI * 2 / 4) * i
-            growPixel(
-              org.x + Math.cos(angle) * 2,
-              org.y + Math.sin(angle) * 2,
-              0.4,
-              org.color
-            )
+          
+          // Mites leave tiny but numerous trails
+          if (org.type === 'mite') {
+            for (let i = 0; i < 3; i++) {
+              growPixel(
+                org.x + (Math.random() - 0.5) * 2,
+                org.y + (Math.random() - 0.5) * 2,
+                0.3,
+                org.color,
+                org
+              )
+            }
           }
-        }
-        
-        // Mites leave tiny but numerous trails
-        if (org.type === 'mite') {
-          for (let i = 0; i < 3; i++) {
-            growPixel(
-              org.x + (Math.random() - 0.5) * 2,
-              org.y + (Math.random() - 0.5) * 2,
-              0.3,
-              org.color
-            )
-          }
-        }
 
-        // Insects leave different trails
-        if (org.type === 'insect') {
-          org.trail.push({ x: org.x, y: org.y, opacity: 1 })
-          if (org.trail.length > 15) org.trail.shift()
-          org.trail.forEach((point, i) => {
-            const opacity = (i / org.trail.length) * 0.5
-            growPixel(point.x, point.y, opacity, org.color)
-          })
-        }
-        
-        // Flies leave erratic trails
-        if (org.type === 'fly') {
-          org.trail.push({ x: org.x, y: org.y, opacity: 1 })
-          if (org.trail.length > 8) org.trail.shift()
-          org.trail.forEach((point, i) => {
-            const opacity = (i / org.trail.length) * 0.4
-            growPixel(point.x, point.y, opacity, org.color)
-          })
-          // Flies spread growth randomly
-          if (Math.random() < 0.3) {
-            growPixel(
-              org.x + (Math.random() - 0.5) * 10,
-              org.y + (Math.random() - 0.5) * 10,
-              0.3,
-              org.color
-            )
+          // Insects leave different trails
+          if (org.type === 'insect') {
+            org.trail.push({ x: org.x, y: org.y, opacity: 1 })
+            if (org.trail.length > 15) org.trail.shift()
+            org.trail.forEach((point, i) => {
+              const opacity = (i / org.trail.length) * 0.5
+              growPixel(point.x, point.y, opacity, org.color, org)
+            })
           }
-        }
+          
+          // Flies leave erratic trails
+          if (org.type === 'fly') {
+            org.trail.push({ x: org.x, y: org.y, opacity: 1 })
+            if (org.trail.length > 8) org.trail.shift()
+            org.trail.forEach((point, i) => {
+              const opacity = (i / org.trail.length) * 0.4
+              growPixel(point.x, point.y, opacity, org.color, org)
+            })
+            // Flies spread growth randomly
+            if (Math.random() < 0.3) {
+              growPixel(
+                org.x + (Math.random() - 0.5) * 10,
+                org.y + (Math.random() - 0.5) * 10,
+                0.3,
+                org.color,
+                org
+              )
+            }
+          }
 
-        // Slime spreads more aggressively
-        if (org.type === 'slime') {
-          for (let i = 0; i < 8; i++) {
-            const angle = Math.random() * Math.PI * 2
-            const dist = Math.random() * 7
-            growPixel(
-              org.x + Math.cos(angle) * dist,
-              org.y + Math.sin(angle) * dist,
-              0.6,
-              org.color
-            )
+          // Slime spreads more aggressively
+          if (org.type === 'slime') {
+            for (let i = 0; i < 8; i++) {
+              const angle = Math.random() * Math.PI * 2
+              const dist = Math.random() * 7
+              growPixel(
+                org.x + Math.cos(angle) * dist,
+                org.y + Math.sin(angle) * dist,
+                0.6,
+                org.color,
+                org
+              )
+            }
           }
         }
 
@@ -1114,21 +1262,55 @@ export default function Home() {
         ctx.shadowBlur = 0
         ctx.globalAlpha = 1
 
-        // Reproduce occasionally - faster for some types
-        const reproductionRate = org.type === 'mite' ? 0.02 : org.type === 'fly' ? 0.015 : 0.01
-        if (org.age > 50 && org.energy > 50 && Math.random() < reproductionRate) {
-          spawnOrganism(org.type, org.x + (Math.random() - 0.5) * 50, org.y + (Math.random() - 0.5) * 50)
-          org.energy -= 30 // Reproduction costs energy
+        // Reproduce based on resources and population - Game of Life style
+        const population = org.population
+        const maxPopulation = {
+          spore: 100,
+          mycelium: 80,
+          insect: 60,
+          slime: 70,
+          beetle: 40,
+          mite: 150,
+          worm: 50,
+          fly: 90
         }
         
-        // Regain energy from growth
-        if (org.energy < 100 && Math.random() < 0.1) {
-          org.energy = Math.min(100, org.energy + 5)
+        const canReproduce = 
+          org.age > 50 && 
+          org.energy > 60 && 
+          population < (maxPopulation[org.type] || 50) &&
+          localResource > 30
+        
+        // Reproduction rates vary by type and conditions
+        let reproductionRate = 0
+        if (org.type === 'mite') reproductionRate = canReproduce ? 0.03 : 0
+        else if (org.type === 'fly') reproductionRate = canReproduce ? 0.02 : 0
+        else if (org.type === 'beetle') reproductionRate = canReproduce && population < 20 ? 0.015 : 0
+        else reproductionRate = canReproduce ? 0.01 : 0
+        
+        // Overpopulation penalty
+        if (population > (maxPopulation[org.type] || 50) * 0.8) {
+          org.energy -= 0.5 // Stress from overcrowding
+        }
+        
+        if (Math.random() < reproductionRate) {
+          spawnOrganism(org.type, org.x + (Math.random() - 0.5) * 50, org.y + (Math.random() - 0.5) * 50)
+          org.energy -= 40 // Reproduction costs significant energy
+          // Consume resources for reproduction
+          resourceMap.set(resourceKey, Math.max(0, localResource - 20))
         }
 
-        // Death - based on age and energy
-        if ((org.age > 1500 || org.energy <= 0) && Math.random() < 0.002) {
+        // Death - based on age, energy, and competition
+        const shouldDie = 
+          org.energy <= 0 || 
+          org.age > 2000 ||
+          (org.age > 1000 && org.energy < 20) ||
+          (population > (maxPopulation[org.type] || 50) && org.energy < 30) // Overpopulation death
+        
+        if (shouldDie && Math.random() < 0.01) {
           organisms.splice(idx, 1)
+          // Release resources on death
+          resourceMap.set(resourceKey, Math.min(100, localResource + 10))
         }
       })
 
@@ -1183,17 +1365,32 @@ export default function Home() {
       })
       ctx.putImageData(imageData, 0, 0)
 
-      // Spawn new organisms more frequently - diverse ecosystem
-      if (Math.random() < 0.05) {
+      // Spawn new organisms only if resources available - natural selection
+      const totalResources = Array.from(resourceMap.values()).reduce((a, b) => a + b, 0)
+      const avgResources = totalResources / resourceMap.size
+      
+      if (avgResources > 30 && Math.random() < 0.02) {
         const types: PixelOrganism['type'][] = ['spore', 'mycelium', 'insect', 'slime', 'beetle', 'mite', 'worm', 'fly']
-        spawnOrganism(types[Math.floor(Math.random() * types.length)])
+        const type = types[Math.floor(Math.random() * types.length)]
+        const population = getPopulationCount(type)
+        const maxPop = {
+          spore: 100, mycelium: 80, insect: 60, slime: 70,
+          beetle: 40, mite: 150, worm: 50, fly: 90
+        }
+        // Only spawn if population is below max
+        if (population < (maxPop[type] || 50)) {
+          spawnOrganism(type)
+        }
       }
       
-      // Ensure minimum organism count for active ecosystem
-      if (organisms.length < 30) {
+      // Ecosystem balance - if total population too low, spawn more
+      if (organisms.length < 20 && avgResources > 20) {
         const types: PixelOrganism['type'][] = ['spore', 'mycelium', 'insect', 'slime', 'beetle', 'mite', 'worm', 'fly']
-        for (let i = 0; i < 5; i++) {
-          spawnOrganism(types[Math.floor(Math.random() * types.length)])
+        for (let i = 0; i < 3; i++) {
+          const type = types[Math.floor(Math.random() * types.length)]
+          if (getPopulationCount(type) < 30) {
+            spawnOrganism(type)
+          }
         }
       }
 
