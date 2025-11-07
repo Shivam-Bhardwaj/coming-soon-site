@@ -24,6 +24,7 @@ const messages = [
 const antSprites = ['_@_v', '_@_>', '<_@_'];
 const spiderSprites = ['/\\oo/\\', 'oo'];
 const plantSprites = ['{*}','[*]','{*}'];
+const X_LINK_LABEL_FULL = '> ask him -> x.com/LazyShivam'
 
 // Fungus now uses only dots - defined in growFungus function
 
@@ -104,6 +105,8 @@ export default function Home() {
   const [showCorruption, setShowCorruption] = useState(false)
   const [showXLink, setShowXLink] = useState(false)
   const [phaseIntensity, setPhaseIntensity] = useState(0)
+  const [terminalSuppressed, setTerminalSuppressed] = useState(false)
+  const [linkLabel, setLinkLabel] = useState(X_LINK_LABEL_FULL)
   const [backgroundArt, setBackgroundArt] = useState<string[]>([])
   const [sprites, setSprites] = useState<Sprite[]>([]);
   const [fungusGrid, setFungusGrid] = useState<string[][]>([]);
@@ -153,6 +156,17 @@ export default function Home() {
   const perfStatsRef = useRef<Record<string, { total: number; count: number; max: number }>>({})
   const spreadThrottleRef = useRef(1)
   const growthMapCapRef = useRef(32000)
+  const terminalSuppressedRef = useRef(false)
+  const corruptionDecayRef = useRef({ started: false, startTime: 0 })
+
+  useEffect(() => {
+    if (!showCorruption) {
+      setTerminalSuppressed(false)
+      terminalSuppressedRef.current = false
+      corruptionDecayRef.current = { started: false, startTime: 0 }
+      setLinkLabel(X_LINK_LABEL_FULL)
+    }
+  }, [showCorruption])
 
   // Refs to avoid stale state in interval-driven biology updates
   const fungusGridRef = useRef<string[][]>([]);
@@ -225,6 +239,8 @@ export default function Home() {
 
     const startTime = Date.now()
     const showcaseEndTime = 30000 // 30 seconds showcase period
+    const cyclesBeforeDecay = 3
+    const decayDuration = 15000 // fade out over 15s
 
     const interval = setInterval(() => {
       const elapsed = Date.now() - startTime
@@ -234,20 +250,51 @@ export default function Home() {
       // In showcase mode, make cycles slightly faster to show all phases
       const cycleSpeed = isShowcase ? 8000 : 10000 // 8s cycles in showcase, 10s after
       const intensity = (Math.sin(elapsed / (cycleSpeed / (2 * Math.PI))) + 1) / 2
-      setPhaseIntensity(intensity)
+
+      if (!corruptionDecayRef.current.started && elapsed >= cycleSpeed * cyclesBeforeDecay) {
+        corruptionDecayRef.current = { started: true, startTime: Date.now() }
+      }
+
+      let decayMultiplier = 1
+      if (corruptionDecayRef.current.started) {
+        const decayElapsed = Date.now() - corruptionDecayRef.current.startTime
+        decayMultiplier = Math.max(0, 1 - decayElapsed / decayDuration)
+        if (decayMultiplier <= 0 && !terminalSuppressedRef.current) {
+          terminalSuppressedRef.current = true
+          setTerminalSuppressed(true)
+          setCorruptedLines([])
+        }
+      }
+
+      const shouldShortenLink = terminalSuppressedRef.current || decayMultiplier < 0.6
+      setLinkLabel(prev => {
+        const target = shouldShortenLink ? 'him' : X_LINK_LABEL_FULL
+        return prev === target ? prev : target
+      })
+
+      const decayedIntensity = intensity * decayMultiplier
+      setPhaseIntensity(decayedIntensity)
 
       let currentPhase: 'controlled' | 'chaos' | 'art' = 'controlled'
-      if (intensity > 0.3) currentPhase = 'chaos'
-      if (intensity > 0.75) currentPhase = 'art'
+      if (decayedIntensity > 0.3) currentPhase = 'chaos'
+      if (decayedIntensity > 0.75) currentPhase = 'art'
       
       // Boost intensity in showcase mode to ensure all features are visible
-      const effectiveIntensity = isShowcase ? Math.min(1, intensity * 1.2) : intensity
+      const effectiveIntensity = isShowcase ? Math.min(1, decayedIntensity * 1.2) : decayedIntensity
+      const maxVisibleLines = terminalSuppressedRef.current
+        ? 0
+        : Math.max(0, Math.floor(25 * Math.max(decayMultiplier, 0)))
       
       setCorruptedLines((prev) => {
+        if (terminalSuppressedRef.current) return []
         const start = performance.now()
         let linesToCorrupt = [...messages] // Start from original messages for stability
 
         if (currentPhase === 'controlled') {
+          if (maxVisibleLines === 0) {
+            recordPerf('textCorruption', performance.now() - start)
+            return []
+          }
           const result = linesToCorrupt.map((line) => {
             // Fade out corruption as intensity drops
             if (Math.random() < effectiveIntensity * 0.3) {
@@ -255,8 +302,9 @@ export default function Home() {
             }
             return line
           })
+          const limited = result.slice(-Math.max(1, maxVisibleLines))
           recordPerf('textCorruption', performance.now() - start)
-          return result
+          return limited
         } else if (currentPhase === 'chaos') {
           // Biology starts taking over in chaos phase
           if (Math.random() < effectiveIntensity * 0.6) {
@@ -283,12 +331,16 @@ export default function Home() {
             linesToCorrupt.push(newLine)
           }
           
+          if (maxVisibleLines === 0) {
+            recordPerf('textCorruption', performance.now() - start)
+            return []
+          }
           const result = linesToCorrupt.map((line) => {
             if (Math.random() < effectiveIntensity * 0.7) {
               return chaosCorruption(line, effectiveIntensity)
             }
             return line
-          }).slice(-15)
+          }).slice(-Math.max(1, Math.min(15, maxVisibleLines)))
           recordPerf('textCorruption', performance.now() - start)
           return result
         } else { // Art phase - Biology fully takes over
@@ -314,12 +366,16 @@ export default function Home() {
             linesToCorrupt.push(...fullScreenPatterns[Math.floor(Math.random() * fullScreenPatterns.length)].split('\n'))
           }
           
+          if (maxVisibleLines === 0) {
+            recordPerf('textCorruption', performance.now() - start)
+            return []
+          }
           const lineResult = linesToCorrupt.map((line) => {
             if (Math.random() < effectiveIntensity) {
               return chaosCorruption(line, effectiveIntensity)
             }
             return line
-          }).slice(-25)
+          }).slice(-Math.max(1, Math.min(25, maxVisibleLines)))
           recordPerf('textCorruption', performance.now() - start)
           return lineResult
         }
@@ -1599,7 +1655,7 @@ export default function Home() {
         position: 'relative',
         zIndex: 1
       }}>
-        {(!showCorruption ? displayedLines : corruptedLines).map((line, index) => (
+        {!terminalSuppressed && (!showCorruption ? displayedLines : corruptedLines).map((line, index) => (
           <div 
             key={index} 
             className="line"
@@ -1632,7 +1688,7 @@ export default function Home() {
               textDecoration: 'underline',
               fontSize: '14px'
             }}>
-              {'> ask him -> x.com/LazyShivam'}
+              {linkLabel}
             </a>
           </div>
         )}
