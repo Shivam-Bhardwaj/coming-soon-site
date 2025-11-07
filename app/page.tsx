@@ -485,14 +485,14 @@ export default function Home() {
               key={index} 
               className="line" 
               style={{
-                transform: !isXLink && corruptionPhase !== 'controlled' && Math.random() < 0.4 
+                transform: isXLink ? 'none' : (corruptionPhase !== 'controlled' && Math.random() < 0.4 
                   ? `translateX(${Math.random() * 40 - 20}px) rotate(${Math.random() * 10 - 5}deg) scaleX(${0.8 + Math.random() * 0.4})` 
-                  : 'none',
-                fontSize: !isXLink && corruptionPhase === 'art' && Math.random() < 0.5 
+                  : 'none'),
+                fontSize: isXLink ? '14px' : (corruptionPhase === 'art' && Math.random() < 0.5 
                   ? `${10 + Math.random() * 20}px` 
-                  : '14px',
+                  : '14px'),
                 opacity: isXLink ? 1 : (corruptionPhase === 'art' ? 0.4 + Math.random() * 0.6 : 1),
-                filter: !isXLink && corruptionPhase === 'art' && Math.random() < 0.3 ? 'blur(1px)' : 'none'
+                filter: isXLink ? 'none' : (corruptionPhase === 'art' && Math.random() < 0.3 ? 'blur(1px)' : 'none')
               }}
             >
               {isXLink ? (
@@ -511,9 +511,25 @@ export default function Home() {
           )
         })}
         {isTyping && (
-          <div className="line">
-            <span className="text">{currentText}</span>
-            <span className="cursor">_</span>
+          <div className="line" style={{ transform: 'none' }}>
+            {currentText.includes('x.com/LazyShivam') ? (
+              <>
+                <a href="https://x.com/LazyShivam" target="_blank" rel="noopener noreferrer" style={{ 
+                  color: '#79b8ff', 
+                  textDecoration: 'underline',
+                  fontSize: '14px',
+                  fontWeight: 'normal'
+                }}>
+                  {currentText}
+                </a>
+                <span className="cursor" style={{ color: '#79b8ff' }}>_</span>
+              </>
+            ) : (
+              <>
+                <span className="text">{currentText}</span>
+                <span className="cursor">_</span>
+              </>
+            )}
           </div>
         )}
       </div>
