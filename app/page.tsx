@@ -131,7 +131,7 @@ const geometricPatterns = [
   '╱╲╱╲╱╲╱╲',
 ]
 
-function generateBeautifulPattern(): string[] {
+export function generateBeautifulPattern(): string[] {
   const patterns = [
     // Yin-Yang pattern
     () => [
@@ -204,9 +204,9 @@ function generateBeautifulPattern(): string[] {
 }
 
 // --- Biological Growth Types ---
-type GrowthType = 'fungus' | 'slime' | 'mold' | 'mycelium' | 'algae';
+export type GrowthType = 'fungus' | 'slime' | 'mold' | 'mycelium' | 'algae';
 
-interface GrowthColony {
+export interface GrowthColony {
   type: GrowthType;
   cells: [number, number][];
   age: number;
@@ -231,7 +231,7 @@ const growthColors: Record<GrowthType, string> = {
 };
 
 // --- Multi-Colony Biological Takeover System ---
-function growBiologicalColonies(
+export function growBiologicalColonies(
   grid: string[][], 
   intensity: number, 
   colonies: GrowthColony[],
@@ -359,7 +359,7 @@ function generateRandomArt(width: number, height: number): string[] {
 }
 
 // Phase 1: Controlled corruption (maintains structure)
-function controlledCorruption(text: string): string {
+export function controlledCorruption(text: string): string {
   if (text.trim() === '' || text === '>') return text // Never corrupt X link
   
   const words = text.match(/(>|[^\s]+|\s+)/g) || []
@@ -399,7 +399,7 @@ function controlledCorruption(text: string): string {
 }
 
 // Phase 2: Chaos corruption (breaks all rules)
-function chaosCorruption(text: string, intensity: number): string {
+export function chaosCorruption(text: string, intensity: number): string {
   if (text.trim() === '' || text === '>') return text // Never corrupt X link
   
   let result = text
