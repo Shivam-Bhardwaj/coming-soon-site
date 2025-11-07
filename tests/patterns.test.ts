@@ -1,4 +1,4 @@
-import { generateBeautifulPattern } from '../app/page'
+import { generateBeautifulPattern } from '../lib/sim'
 
 describe('generateBeautifulPattern', () => {
   test('returns a non-empty array of strings', () => {
@@ -8,4 +8,3 @@ describe('generateBeautifulPattern', () => {
     pattern.forEach(line => expect(typeof line).toBe('string'))
   })
 })
-

@@ -1,4 +1,4 @@
-import { growBiologicalColonies, type GrowthColony, type GrowthType } from '../app/page'
+import { growBiologicalColonies, type GrowthColony, type GrowthType } from '../lib/sim'
 
 // Helper to stub Math.random deterministically
 function withMockedRandom(sequence: number[], fn: () => void) {
@@ -58,4 +58,3 @@ describe('growBiologicalColonies', () => {
     })
   })
 })
-

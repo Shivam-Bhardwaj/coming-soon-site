@@ -1,4 +1,4 @@
-import { controlledCorruption, chaosCorruption } from '../app/page'
+import { controlledCorruption, chaosCorruption } from '../lib/sim'
 
 describe('corruption functions', () => {
   test('controlledCorruption preserves empty and ">"', () => {
@@ -27,4 +27,3 @@ describe('corruption functions', () => {
     expect(out.length).toBeGreaterThan(0)
   })
 })
-
