@@ -275,27 +275,30 @@ export default function Home() {
       // Handle antimony -> Sb corruption
       if (animationPhaseRef.current === 'antimony') {
         const antimonyElapsed = elapsed - chaosEndTime
-        if (antimonyElapsed > 800) {
+        if (antimonyElapsed >= 800) {
+          // Transition to Sb - ensure it happens
           animationPhaseRef.current = 'sb'
           setAnimationPhase('sb')
           setAntimonyText('Sb')
           setCorruptedLines(['Sb'])
-        } else {
-          // Gradually corrupt antimony text
-          const corruptionProgress = antimonyElapsed / 800
-          if (corruptionProgress > 0.3) {
-            const baseText = 'antimony'
-            const chars = baseText.split('')
-            const corrupted = chars.map((char, i) => {
-              if (Math.random() < (corruptionProgress - 0.3) * 1.5) {
-                return getRandomExtendedChar()
-              }
-              return char
-            }).join('')
-            if (corrupted !== antimonyText) {
-              setAntimonyText(corrupted)
+          return
+        }
+        
+        // Gradually corrupt antimony text - update less frequently to avoid getting stuck
+        const corruptionProgress = antimonyElapsed / 800
+        if (corruptionProgress > 0.2 && Math.random() < 0.3) {
+          // Corrupt more aggressively as time progresses
+          const corruptionRate = (corruptionProgress - 0.2) / 0.8 // 0 to 1
+          const baseText = 'antimony'
+          let corrupted = ''
+          for (let i = 0; i < baseText.length; i++) {
+            if (Math.random() < corruptionRate * 0.7) {
+              corrupted += getRandomExtendedChar()
+            } else {
+              corrupted += baseText[i]
             }
           }
+          setAntimonyText(corrupted)
         }
         return
       }
