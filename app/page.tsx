@@ -6,7 +6,6 @@ const messages = [
   '> coming soon is coming soon',
   '> what is time anyway, it will come before GTA 6',
   '> status: slightly better than 404',
-  '> ask him -> x.com/LazyShivam',
 ]
 
 // Complete words from other languages
@@ -312,63 +311,26 @@ export default function Home() {
   const [isTyping, setIsTyping] = useState(true)
   const [corruptedLines, setCorruptedLines] = useState<string[]>([])
   const [showCorruption, setShowCorruption] = useState(false)
-  const [corruptionPhase, setCorruptionPhase] = useState<'controlled' | 'chaos' | 'art'>('controlled')
+  const [showXLink, setShowXLink] = useState(false) // New state for the link
+  const [phaseIntensity, setPhaseIntensity] = useState(0) // 0 to 1 for smooth transitions
   const [backgroundArt, setBackgroundArt] = useState<string[]>([])
-  const [corruptionSpeed, setCorruptionSpeed] = useState(200)
-  const [phaseIntensity, setPhaseIntensity] = useState(0) // 0 to 1, smooth transition
   const containerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (currentLineIndex >= messages.length) {
       setIsTyping(false)
-      // Start corruption effect after a short delay
+      // Show the static X link after typing is done
+      setTimeout(() => {
+        setShowXLink(true)
+      }, 600)
+
+      // Start the corruption cycle after the link appears
       setTimeout(() => {
         setShowCorruption(true)
-        setCorruptedLines([...displayedLines])
-      }, 1000)
+        setCorruptedLines([...messages])
+      }, 1200)
       
-      // Create a smooth cyclic yin-yang effect - chaos and order
-      let phase = 0
-      let intensity = 0
-      let intensityDirection = 1 // 1 for ramping up, -1 for ramping down
-      
-      const cyclePhases = () => {
-        const phases = [
-          { type: 'controlled', speed: 200, duration: 5000 },  // Order - 5 seconds
-          { type: 'chaos', speed: 100, duration: 6000 },       // Chaos - 6 seconds
-          { type: 'art', speed: 50, duration: 7000 },          // Beautiful chaos - 7 seconds
-          { type: 'controlled', speed: 150, duration: 5000 },  // Back to order - 5 seconds
-        ]
-        
-        const currentPhase = phases[phase]
-        
-        // Smooth intensity transition
-        intensity += intensityDirection * 0.05 // Gradual ramp
-        intensity = Math.max(0, Math.min(1, intensity)) // Clamp between 0 and 1
-        
-        setPhaseIntensity(intensity)
-        
-        // When intensity reaches 1, we're fully in the phase
-        // When it reaches 0, transition to next phase
-        if (intensity >= 1 && intensityDirection === 1) {
-          intensityDirection = -1 // Start ramping down
-        } else if (intensity <= 0 && intensityDirection === -1) {
-          // Move to next phase
-          phase = (phase + 1) % phases.length
-          intensityDirection = 1 // Start ramping up
-          setCorruptionPhase(phases[phase].type as any)
-          setCorruptionSpeed(phases[phase].speed)
-        }
-      }
-      
-      // Smooth transition every 50ms for gradual effect
-      const phaseInterval = setInterval(cyclePhases, 50)
-      
-      // Start with first phase
-      setCorruptionPhase('controlled')
-      setPhaseIntensity(0)
-      
-      return () => clearInterval(phaseInterval)
+      return
     }
 
     const currentMessage = messages[currentLineIndex]
@@ -392,89 +354,72 @@ export default function Home() {
     }
   }, [currentText, currentLineIndex, displayedLines])
 
-  // Corruption effect
+  // Smooth Corruption Cycle Effect
   useEffect(() => {
     if (!showCorruption) return
 
+    const startTime = Date.now()
+
     const interval = setInterval(() => {
+      // Use a sine wave for a smooth 0 -> 1 -> 0 oscillation over ~12 seconds
+      const elapsed = Date.now() - startTime
+      const intensity = (Math.sin(elapsed / 4000) + 1) / 2 // Smooth wave
+      setPhaseIntensity(intensity)
+
+      // Determine phase based on intensity
+      let currentPhase: 'controlled' | 'chaos' | 'art' = 'controlled'
+      if (intensity > 0.4) currentPhase = 'chaos'
+      if (intensity > 0.8) currentPhase = 'art'
+      
       setCorruptedLines((prev) => {
-        const isLastLineXLink = (line: string) => line.includes('x.com/LazyShivam')
-        
-        // Always preserve X link line
-        const xLinkLine = prev.find(line => isLastLineXLink(line)) || '> ask him -> x.com/LazyShivam'
-        const otherLines = prev.filter(line => !isLastLineXLink(line))
-        
-        // Phase-based corruption
-        if (corruptionPhase === 'controlled') {
-          const corrupted = otherLines.map((line) => {
-            // Use inverse intensity - more order when intensity is low
-            const corruptionChance = 0.3 * (1 - phaseIntensity)
-            if (Math.random() < corruptionChance) {
+        let linesToCorrupt = [...prev]
+
+        if (currentPhase === 'controlled') {
+          return linesToCorrupt.map((line) => {
+            // Fade out corruption as intensity drops
+            if (Math.random() < (1 - intensity) * 0.5) {
               return controlledCorruption(line, false)
+            }
+            // Slowly resolve back to original
+            if(Math.random() < (1 - intensity) * 0.1) {
+                const originalIndex = messages.findIndex(m => m.startsWith(line.substring(0, 10)));
+                if(originalIndex !== -1) return messages[originalIndex];
             }
             return line
           })
-          return [...corrupted, xLinkLine]
-        } else if (corruptionPhase === 'chaos') {
-          // Chaos phase - use smooth phase intensity
-          const intensity = phaseIntensity
-          
-          // Randomly add new lines with increasing frequency (but not X link)
-          if (Math.random() < 0.2 * intensity) {
-            const newLine = Array(Math.floor(Math.random() * 30))
-              .fill(0)
-              .map(() => Math.random() < 0.2 ? getRandomEnglishWord() : getRandomExtendedChar())
-              .join(Math.random() < 0.3 ? ' ' : '')
-            otherLines.push(newLine)
+        } else if (currentPhase === 'chaos') {
+          if (Math.random() < intensity * 0.2) {
+            const newLine = Array(Math.floor(Math.random() * 30)).fill(0)
+              .map(() => getRandomExtendedChar()).join('')
+            linesToCorrupt.push(newLine)
           }
           
-          const corrupted = otherLines.map((line) => {
-            if (Math.random() < 0.6) {
+          return linesToCorrupt.map((line) => {
+            if (Math.random() < intensity * 0.7) {
               return chaosCorruption(line, intensity, false)
             }
             return line
-          }).slice(-14) // Keep only last 14 non-X-link lines
-          
-          // Always include X link line at the end
-          return [...corrupted, xLinkLine]
-        } else {
-          // Art phase - generate beautiful patterns with smooth intensity
-          const intensity = phaseIntensity
-          
-          // Generate beautiful background patterns
-          if (Math.random() < 0.7) {
-            const beautifulArt = generateBeautifulPattern()
-            setBackgroundArt(beautifulArt)
+          }).slice(-15)
+        } else { // Art phase
+          if (Math.random() < intensity * 0.5) {
+            setBackgroundArt(generateBeautifulPattern())
+          }
+          if (Math.random() < intensity * 0.4) {
+            linesToCorrupt.push(...fullScreenPatterns[Math.floor(Math.random() * fullScreenPatterns.length)].split('\n'))
           }
           
-          // Add full screen patterns
-          if (Math.random() < 0.4) {
-            const pattern = fullScreenPatterns[Math.floor(Math.random() * fullScreenPatterns.length)]
-            otherLines.push(...pattern.split('\n').filter(l => l.trim()))
-          }
-          
-          // Add geometric patterns
-          if (Math.random() < 0.3) {
-            const geoPattern = geometricPatterns[Math.floor(Math.random() * geometricPatterns.length)]
-            otherLines.push(geoPattern)
-          }
-          
-          // Maximum chaos on existing lines
-          const corrupted = otherLines.map((line) => {
-            if (Math.random() < 0.8) {
+          return linesToCorrupt.map((line) => {
+            if (Math.random() < intensity) {
               return chaosCorruption(line, intensity, false)
             }
             return line
-          }).slice(-24) // Keep last 24 non-X-link lines
-          
-          // Always include X link line at the end
-          return [...corrupted, xLinkLine]
+          }).slice(-25)
         }
       })
-    }, corruptionSpeed)
+    }, 100) // Faster interval for smoother visual updates
 
     return () => clearInterval(interval)
-  }, [showCorruption, corruptionPhase, corruptionSpeed, phaseIntensity])
+  }, [showCorruption])
 
   return (
     <main 
@@ -486,7 +431,7 @@ export default function Home() {
       }}
     >
       {/* Background art layer */}
-      {corruptionPhase === 'art' && backgroundArt.length > 0 && (
+      {corruptedLines.length > 0 && corruptedLines[0].includes('x.com/LazyShivam') && (
         <div style={{
           position: 'absolute',
           top: 0,
@@ -502,7 +447,7 @@ export default function Home() {
           whiteSpace: 'pre',
           overflow: 'hidden'
         }}>
-          {backgroundArt.map((line, i) => (
+          {corruptedLines.map((line, i) => (
             <div key={i}>{line}</div>
           ))}
         </div>
@@ -512,69 +457,42 @@ export default function Home() {
         position: 'relative',
         zIndex: 1
       }}>
-        {(showCorruption ? corruptedLines : displayedLines).map((line, index) => {
-          const isXLink = line.includes('x.com/LazyShivam')
-          // Always show X link line, restore it if corrupted
-          const displayLine = isXLink ? '> ask him -> x.com/LazyShivam' : line
-          
-          return (
-            <div 
-              key={isXLink ? 'xlink' : index} 
-              className="line" 
-              style={{
-                transform: 'none', // Never move X link
-                fontSize: '14px', // Fixed size
-                opacity: 1, // Always visible
-                filter: 'none', // No blur
-                position: isXLink ? 'relative' : 'relative',
-                zIndex: isXLink ? 1000 : 1
-              }}
-            >
-              {isXLink ? (
-                <a href="https://x.com/LazyShivam" target="_blank" rel="noopener noreferrer" style={{ 
-                  color: '#79b8ff', 
-                  textDecoration: 'underline',
-                  fontSize: '14px',
-                  fontWeight: 'normal',
-                  display: 'inline-block'
-                }}>
-                  {displayLine}
-                </a>
-              ) : (
-                <span className="text" style={{
-                  transform: corruptionPhase !== 'controlled' && Math.random() < 0.4 
-                    ? `translateX(${Math.random() * 40 - 20}px) rotate(${Math.random() * 10 - 5}deg) scaleX(${0.8 + Math.random() * 0.4})` 
-                    : 'none',
-                  fontSize: corruptionPhase === 'art' && Math.random() < 0.5 
-                    ? `${10 + Math.random() * 20}px` 
-                    : '14px',
-                  opacity: corruptionPhase === 'art' ? 0.4 + Math.random() * 0.6 : 1,
-                  filter: corruptionPhase === 'art' && Math.random() < 0.3 ? 'blur(1px)' : 'none'
-                }}>{line}</span>
-              )}
-            </div>
-          )
-        })}
+        {(showCorruption ? corruptedLines : displayedLines).map((line, index) => (
+          <div 
+            key={index} 
+            className="line"
+            style={{
+              // All chaotic styles are applied here now
+              transform: corruptedLines.length > 0 && corruptedLines[0].includes('x.com/LazyShivam') && Math.random() < phaseIntensity * 0.5 
+                ? `translateX(${(Math.random() * 40 - 20) * phaseIntensity}px) rotate(${(Math.random() * 10 - 5) * phaseIntensity}deg)` 
+                : 'none',
+              fontSize: corruptedLines.length > 0 && corruptedLines[0].includes('x.com/LazyShivam') && Math.random() < phaseIntensity
+                ? `${10 + Math.random() * 20}px` 
+                : '14px',
+              opacity: corruptedLines.length > 0 && corruptedLines[0].includes('x.com/LazyShivam') ? 0.4 + Math.random() * 0.6 : 1,
+              filter: corruptedLines.length > 0 && corruptedLines[0].includes('x.com/LazyShivam') && Math.random() < phaseIntensity * 0.4 ? 'blur(1.5px)' : 'none'
+            }}
+          >
+            <span className="text">{line}</span>
+          </div>
+        ))}
         {isTyping && (
-          <div className="line" style={{ transform: 'none' }}>
-            {currentText.includes('x.com/LazyShivam') || currentText.includes('ask him') ? (
-              <>
-                <a href="https://x.com/LazyShivam" target="_blank" rel="noopener noreferrer" style={{ 
-                  color: '#79b8ff', 
-                  textDecoration: 'underline',
-                  fontSize: '14px',
-                  fontWeight: 'normal'
-                }}>
-                  {currentText.includes('x.com/LazyShivam') ? currentText : '> ask him -> x.com/LazyShivam'}
-                </a>
-                <span className="cursor" style={{ color: '#79b8ff' }}>_</span>
-              </>
-            ) : (
-              <>
-                <span className="text">{currentText}</span>
-                <span className="cursor">_</span>
-              </>
-            )}
+          <div className="line">
+            <span className="text">{currentText}</span>
+            <span className="cursor">_</span>
+          </div>
+        )}
+        
+        {/* The X link is now completely separate and static */}
+        {showXLink && (
+          <div className="line" style={{ transform: 'none', marginTop: '4px' }}>
+            <a href="https://x.com/LazyShivam" target="_blank" rel="noopener noreferrer" style={{ 
+              color: '#79b8ff', 
+              textDecoration: 'underline',
+              fontSize: '14px'
+            }}>
+              > ask him -> x.com/LazyShivam
+            </a>
           </div>
         )}
       </div>
