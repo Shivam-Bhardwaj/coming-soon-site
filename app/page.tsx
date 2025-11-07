@@ -839,9 +839,10 @@ export default function Home() {
       })
     }
 
-    // Initialize resource map
-    for (let x = 0; x < canvas.width; x += 10) {
-      for (let y = 0; y < canvas.height; y += 10) {
+    // Initialize resource map - sparse grid to prevent memory issues
+    const resourceGridSize = 20 // Larger grid to reduce memory
+    for (let x = 0; x < canvas.width; x += resourceGridSize) {
+      for (let y = 0; y < canvas.height; y += resourceGridSize) {
         resourceMap.set(`${x},${y}`, 50 + Math.random() * 50) // Initial resources
       }
     }
@@ -859,20 +860,42 @@ export default function Home() {
       spawnOrganism(initialTypes[Math.floor(Math.random() * initialTypes.length)], x, y)
     }
 
+    // Get resource at location (with bounds checking and sparse lookup)
+    const getResource = (x: number, y: number): number => {
+      const gridX = Math.floor(x / 20) * 20
+      const gridY = Math.floor(y / 20) * 20
+      return resourceMap.get(`${gridX},${gridY}`) || 100
+    }
+    
+    const setResource = (x: number, y: number, value: number) => {
+      const gridX = Math.floor(x / 20) * 20
+      const gridY = Math.floor(y / 20) * 20
+      resourceMap.set(`${gridX},${gridY}`, Math.max(0, Math.min(100, value)))
+    }
+    
     // Organic growth function - pixel-based with resource competition
     const growPixel = (x: number, y: number, intensity: number, color: string, organism?: PixelOrganism) => {
       const px = Math.floor(x)
       const py = Math.floor(y)
+      // Strict bounds checking
       if (px < 0 || px >= canvas.width || py < 0 || py >= canvas.height) return
 
       const key = `${px},${py}`
       const currentIntensity = (growthMap.get(key) as number) || 0
       
       // Check resource availability - competition for space
-      const resourceAvailable = resourceMap.get(key) || 100
+      const resourceAvailable = getResource(px, py)
       if (resourceAvailable < 10 && currentIntensity > 50) {
-        // Resource depleted, growth slows
         return
+      }
+      
+      // Limit growth map size to prevent memory issues
+      if (growthMap.size > 50000) {
+        // Clean up old entries
+        const entries = Array.from(growthMap.entries())
+        entries.slice(0, 25000).forEach(([k]) => {
+          if (!k.includes('_color')) growthMap.delete(k)
+        })
       }
       
       const newIntensity = Math.min(255, currentIntensity + intensity * 30)
@@ -881,36 +904,28 @@ export default function Home() {
       // Consume resources
       if (organism) {
         const resourceCost = intensity * 2
-        const currentResource = resourceMap.get(key) || 100
-        resourceMap.set(key, Math.max(0, currentResource - resourceCost))
+        const currentResource = getResource(px, py)
+        setResource(px, py, currentResource - resourceCost)
       }
       
       // Store color info with intensity
       const colorKey = key + '_color'
       if (!growthMap.has(colorKey)) {
         growthMap.set(colorKey, color)
-      } else {
-        // Blend colors for organic mixing - competition shows as color mixing
-        const existingColor = growthMap.get(colorKey) as string
-        if (Math.random() < 0.3) {
-          growthMap.set(colorKey, color) // Sometimes override for variation
-        }
+      } else if (Math.random() < 0.3) {
+        growthMap.set(colorKey, color)
       }
     }
     
-    // Regenerate resources slowly
+    // Regenerate resources slowly - limit iterations
     const regenerateResources = () => {
+      let count = 0
       resourceMap.forEach((resource, key) => {
+        if (count++ > 1000) return // Limit iterations
         if (resource < 100) {
           resourceMap.set(key, Math.min(100, resource + 0.5))
         }
       })
-      // Add new resource points occasionally
-      if (Math.random() < 0.01) {
-        const x = Math.floor(Math.random() * canvas.width)
-        const y = Math.floor(Math.random() * canvas.height)
-        resourceMap.set(`${x},${y}`, 100)
-      }
     }
 
     // Spread growth from existing pixels
@@ -980,62 +995,12 @@ export default function Home() {
         org.population = getPopulationCount(org.type)
       })
       
-      // Competitive interactions - organisms compete for resources and space
-      organisms.forEach((org, idx) => {
-        // Check for nearby competitors
-        organisms.forEach((other, otherIdx) => {
-          if (idx === otherIdx) return
-          
-          const dx = other.x - org.x
-          const dy = other.y - org.y
-          const dist = Math.sqrt(dx * dx + dy * dy)
-          
-          // Competition radius
-          if (dist < 20) {
-            // Same type - cooperation (slight energy boost)
-            if (org.type === other.type) {
-              if (org.population < 50) { // Don't overpopulate
-                org.energy += 0.05
-              }
-            } else {
-              // Different types - competition
-              const competitionStrength = {
-                beetle: 2, // Beetles are strong competitors
-                fly: 0.5,  // Flies are weak
-                mite: 0.3, // Mites are very weak
-                worm: 1,
-                insect: 1.2,
-                slime: 1.5,
-                spore: 0.8,
-                mycelium: 1.3
-              }
-              
-              const orgStrength = competitionStrength[org.type] || 1
-              const otherStrength = competitionStrength[other.type] || 1
-              
-              // Weaker organism loses energy
-              if (orgStrength < otherStrength) {
-                org.energy -= 0.2
-              } else if (orgStrength > otherStrength) {
-                org.energy += 0.1 // Stronger gains energy
-              }
-              
-              // Predation - some organisms eat others
-              if (org.type === 'beetle' && (other.type === 'mite' || other.type === 'insect')) {
-                if (dist < 5 && Math.random() < 0.1) {
-                  org.energy = Math.min(100, org.energy + 20)
-                  organisms.splice(otherIdx, 1)
-                }
-              }
-              if (org.type === 'insect' && other.type === 'mite') {
-                if (dist < 3 && Math.random() < 0.15) {
-                  org.energy = Math.min(100, org.energy + 10)
-                  organisms.splice(otherIdx, 1)
-                }
-              }
-            }
-          }
-        })
+      // Competitive interactions - optimized to prevent array modification during iteration
+      const organismsToRemove: number[] = []
+      
+      for (let idx = 0; idx < organisms.length; idx++) {
+        const org = organisms[idx]
+        if (!org) continue
         
         // Movement with organic patterns - different behaviors per type
         org.age++
@@ -1078,18 +1043,64 @@ export default function Home() {
         if (org.y < 0 || org.y > canvas.height) org.vy *= -1
         org.x = Math.max(0, Math.min(canvas.width, org.x + org.vx))
         org.y = Math.max(0, Math.min(canvas.height, org.y + org.vy))
-
+        
+        // Check for nearby competitors - limit checks for performance
+        let competitorCount = 0
+        for (let otherIdx = idx + 1; otherIdx < organisms.length && competitorCount < 10; otherIdx++) {
+          const other = organisms[otherIdx]
+          if (!other) continue
+          
+          const dx = other.x - org.x
+          const dy = other.y - org.y
+          const dist = Math.sqrt(dx * dx + dy * dy)
+          
+          if (dist < 20) {
+            competitorCount++
+            // Same type - cooperation
+            if (org.type === other.type && org.population < 50) {
+              org.energy += 0.05
+            } else if (org.type !== other.type) {
+              // Different types - competition
+              const competitionStrength: Record<string, number> = {
+                beetle: 2, fly: 0.5, mite: 0.3, worm: 1,
+                insect: 1.2, slime: 1.5, spore: 0.8, mycelium: 1.3
+              }
+              
+              const orgStrength = competitionStrength[org.type] || 1
+              const otherStrength = competitionStrength[other.type] || 1
+              
+              if (orgStrength < otherStrength) {
+                org.energy -= 0.2
+              } else if (orgStrength > otherStrength) {
+                org.energy += 0.1
+              }
+              
+              // Predation
+              if (org.type === 'beetle' && (other.type === 'mite' || other.type === 'insect')) {
+                if (dist < 5 && Math.random() < 0.1 && !organismsToRemove.includes(otherIdx)) {
+                  org.energy = Math.min(100, org.energy + 20)
+                  organismsToRemove.push(otherIdx)
+                }
+              }
+              if (org.type === 'insect' && other.type === 'mite') {
+                if (dist < 3 && Math.random() < 0.15 && !organismsToRemove.includes(otherIdx)) {
+                  org.energy = Math.min(100, org.energy + 10)
+                  organismsToRemove.push(otherIdx)
+                }
+              }
+            }
+          }
+        }
+        
         // Check resource availability at current location
-        const resourceKey = `${Math.floor(org.x)},${Math.floor(org.y)}`
-        const localResource = resourceMap.get(resourceKey) || 100
+        const localResource = getResource(org.x, org.y)
         
         // Consume resources for survival
         if (localResource > 0) {
           const consumption = 0.5
-          resourceMap.set(resourceKey, Math.max(0, localResource - consumption))
+          setResource(org.x, org.y, localResource - consumption)
           org.energy = Math.min(100, org.energy + consumption * 0.2)
         } else {
-          // No resources - lose energy faster
           org.energy -= 0.3
         }
         
@@ -1214,53 +1225,6 @@ export default function Home() {
           }
         }
 
-        // Render organism as creepy pixel entity
-        ctx.fillStyle = org.color
-        ctx.globalAlpha = 0.9
-        const px = Math.floor(org.x)
-        const py = Math.floor(org.y)
-        
-        // Draw organism with slight glow
-        ctx.shadowBlur = 2
-        ctx.shadowColor = org.color
-        ctx.fillRect(px, py, org.size, org.size)
-        
-        // Add creepy details for different bug types
-        if (org.type === 'insect' && org.size > 1.5) {
-          ctx.fillStyle = '#000000'
-          ctx.globalAlpha = 0.5
-          ctx.fillRect(px + 0.5, py + 0.5, 0.5, 0.5) // Eye
-        } else if (org.type === 'beetle') {
-          // Beetle shell pattern
-          ctx.fillStyle = '#000000'
-          ctx.globalAlpha = 0.3
-          ctx.fillRect(px, py, org.size, org.size)
-          ctx.globalAlpha = 1
-        } else if (org.type === 'fly') {
-          // Fly wings
-          ctx.fillStyle = org.color
-          ctx.globalAlpha = 0.4
-          ctx.fillRect(px - 1, py, 0.5, org.size)
-          ctx.fillRect(px + org.size, py, 0.5, org.size)
-          ctx.globalAlpha = 1
-        } else if (org.type === 'mite') {
-          // Tiny mite - just a dot
-          ctx.fillStyle = org.color
-          ctx.globalAlpha = 0.8
-          ctx.fillRect(px, py, 0.5, 0.5)
-          ctx.globalAlpha = 1
-        } else if (org.type === 'worm') {
-          // Worm segments
-          ctx.fillStyle = org.color
-          ctx.globalAlpha = 0.7
-          for (let i = 0; i < Math.floor(org.size); i++) {
-            ctx.fillRect(px + i, py, 0.8, 0.8)
-          }
-          ctx.globalAlpha = 1
-        }
-        
-        ctx.shadowBlur = 0
-        ctx.globalAlpha = 1
 
         // Reproduce based on resources and population - Game of Life style
         const population = org.population
@@ -1295,34 +1259,41 @@ export default function Home() {
         
         if (Math.random() < reproductionRate) {
           spawnOrganism(org.type, org.x + (Math.random() - 0.5) * 50, org.y + (Math.random() - 0.5) * 50)
-          org.energy -= 40 // Reproduction costs significant energy
-          // Consume resources for reproduction
-          resourceMap.set(resourceKey, Math.max(0, localResource - 20))
+          org.energy -= 40
+          setResource(org.x, org.y, localResource - 20)
         }
 
-        // Death - based on age, energy, and competition
+        // Mark for death
         const shouldDie = 
           org.energy <= 0 || 
           org.age > 2000 ||
           (org.age > 1000 && org.energy < 20) ||
-          (population > (maxPopulation[org.type] || 50) && org.energy < 30) // Overpopulation death
+          (population > (maxPopulation[org.type] || 50) && org.energy < 30)
         
-        if (shouldDie && Math.random() < 0.01) {
+        if (shouldDie && Math.random() < 0.01 && !organismsToRemove.includes(idx)) {
+          organismsToRemove.push(idx)
+          setResource(org.x, org.y, localResource + 10)
+        }
+      }
+      
+      // Remove organisms in reverse order to maintain indices
+      organismsToRemove.sort((a, b) => b - a).forEach(idx => {
+        if (idx >= 0 && idx < organisms.length) {
           organisms.splice(idx, 1)
-          // Release resources on death
-          resourceMap.set(resourceKey, Math.min(100, localResource + 10))
         }
       })
 
       // Spread growth organically
       spreadGrowth()
 
-      // Render pixel data with creepy organic patterns
+      // Render pixel data - optimized with bounds checking
       const imageData = ctx.createImageData(canvas.width, canvas.height)
       const colorMap = new Map<string, string>()
       
-      // First pass: collect colors
-      growthMap.forEach((intensity, key) => {
+      // Collect colors first - limit iterations
+      let colorCount = 0
+      growthMap.forEach((value, key) => {
+        if (colorCount++ > 10000) return // Limit
         if (!key.includes('_color')) {
           const colorKey = key + '_color'
           const storedColor = growthMap.get(colorKey)
@@ -1332,38 +1303,82 @@ export default function Home() {
         }
       })
       
-      // Render pixels
+      // Render pixels - limit iterations and check bounds
+      let renderCount = 0
       growthMap.forEach((value, key) => {
+        if (renderCount++ > 10000) return // Limit iterations
         if (key.includes('_color')) return
         
         const intensity = typeof value === 'number' ? value : 0
         if (intensity <= 5) return
         
         const [x, y] = key.split(',').map(Number)
+        // Strict bounds checking
+        if (x < 0 || x >= canvas.width || y < 0 || y >= canvas.height) return
+        
         const idx = (y * canvas.width + x) * 4
-        if (idx >= 0 && idx < imageData.data.length) {
-          const color = colorMap.get(key) || '#39ff14'
-          const hex = color.replace('#', '')
-          const r = parseInt(hex.substr(0, 2), 16)
-          const g = parseInt(hex.substr(2, 2), 16)
-          const b = parseInt(hex.substr(4, 2), 16)
-          
-          // Creepy pulsing effect
-          const pulse = Math.sin(Date.now() / 1000 + x * 0.01 + y * 0.01) * 0.1 + 0.9
-          const alpha = Math.min(255, intensity * pulse)
-          
-          // Blend with existing (for organic growth)
-          const existingR = imageData.data[idx] || 0
-          const existingG = imageData.data[idx + 1] || 0
-          const existingB = imageData.data[idx + 2] || 0
-          
-          imageData.data[idx] = Math.min(255, existingR * 0.7 + r * alpha / 255)
-          imageData.data[idx + 1] = Math.min(255, existingG * 0.7 + g * alpha / 255)
-          imageData.data[idx + 2] = Math.min(255, existingB * 0.7 + b * alpha / 255)
-          imageData.data[idx + 3] = Math.min(255, alpha)
-        }
+        if (idx < 0 || idx + 3 >= imageData.data.length) return
+        
+        const color = colorMap.get(key) || '#39ff14'
+        const hex = color.replace('#', '')
+        if (hex.length !== 6) return
+        
+        const r = parseInt(hex.substr(0, 2), 16) || 0
+        const g = parseInt(hex.substr(2, 2), 16) || 0
+        const b = parseInt(hex.substr(4, 2), 16) || 0
+        
+        const pulse = Math.sin(Date.now() / 1000 + x * 0.01 + y * 0.01) * 0.1 + 0.9
+        const alpha = Math.min(255, intensity * pulse)
+        
+        imageData.data[idx] = Math.min(255, r * alpha / 255)
+        imageData.data[idx + 1] = Math.min(255, g * alpha / 255)
+        imageData.data[idx + 2] = Math.min(255, b * alpha / 255)
+        imageData.data[idx + 3] = Math.min(255, alpha)
       })
       ctx.putImageData(imageData, 0, 0)
+      
+      // Render organisms - ensure they're visible
+      organisms.forEach((org) => {
+        if (!org) return
+        const px = Math.floor(org.x)
+        const py = Math.floor(org.y)
+        if (px < 0 || px >= canvas.width || py < 0 || py >= canvas.height) return
+        
+        ctx.fillStyle = org.color
+        ctx.globalAlpha = 0.9
+        ctx.shadowBlur = 2
+        ctx.shadowColor = org.color
+        ctx.fillRect(px, py, Math.max(1, org.size), Math.max(1, org.size))
+        
+        // Add details
+        if (org.type === 'insect' && org.size > 1.5) {
+          ctx.fillStyle = '#000000'
+          ctx.globalAlpha = 0.5
+          ctx.fillRect(px + 0.5, py + 0.5, 0.5, 0.5)
+        } else if (org.type === 'beetle') {
+          ctx.fillStyle = '#000000'
+          ctx.globalAlpha = 0.3
+          ctx.fillRect(px, py, org.size, org.size)
+        } else if (org.type === 'fly') {
+          ctx.fillStyle = org.color
+          ctx.globalAlpha = 0.4
+          ctx.fillRect(px - 1, py, 0.5, org.size)
+          ctx.fillRect(px + org.size, py, 0.5, org.size)
+        } else if (org.type === 'mite') {
+          ctx.fillStyle = org.color
+          ctx.globalAlpha = 0.8
+          ctx.fillRect(px, py, 0.5, 0.5)
+        } else if (org.type === 'worm') {
+          ctx.fillStyle = org.color
+          ctx.globalAlpha = 0.7
+          for (let i = 0; i < Math.floor(org.size); i++) {
+            ctx.fillRect(px + i, py, 0.8, 0.8)
+          }
+        }
+        
+        ctx.shadowBlur = 0
+        ctx.globalAlpha = 1
+      })
 
       // Spawn new organisms only if resources available - natural selection
       const totalResources = Array.from(resourceMap.values()).reduce((a, b) => a + b, 0)
