@@ -1879,7 +1879,7 @@ export default function Home() {
       )}
 
       {/* Pixel-Based Creepy Biological Background Canvas */}
-      {showCorruption && animationPhase === 'chaos' && (
+      {showCorruption && (animationPhase === 'chaos' || animationPhase === 'explosion') && (
         <canvas
           ref={backgroundCanvasRef}
           className="biological-canvas"
@@ -1889,9 +1889,9 @@ export default function Home() {
             left: 0,
             width: '100vw',
             height: '100vh',
-            zIndex: 0,
+            zIndex: animationPhase === 'explosion' ? 1004 : 0,
             pointerEvents: 'none',
-            opacity: 0.65
+            opacity: animationPhase === 'explosion' ? 0.3 : 0.65
           }}
         />
       )}
