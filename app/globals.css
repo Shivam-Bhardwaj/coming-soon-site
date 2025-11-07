@@ -13,7 +13,7 @@ body {
 }
 
 body {
-  background: #0d1117;
+  background: #0a0a0a;
   min-height: 100vh;
   overflow-x: hidden;
 }
@@ -65,7 +65,7 @@ body {
 }
 
 .link a {
-  color: #58a6ff;
+  color: #79b8ff;
   text-decoration: underline;
   display: inline-flex;
   align-items: center;
