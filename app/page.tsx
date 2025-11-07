@@ -206,23 +206,13 @@ export default function Home() {
         setShowXLink(true)
       }, 600)
 
-      // Start the corruption cycle after the link appears
+      // Start the animation sequence after the link appears
       setTimeout(() => {
       setShowCorruption(true)
       animationPhaseRef.current = 'chaos'
       setAnimationPhase('chaos')
-      setCorruptedLines([...messages])
-      // Initialize high-density biological grid (finer for better utilization)
-      const cols = Math.floor(window.innerWidth / 6); // Finer grid
-      const rows = Math.floor(window.innerHeight / 12); // Finer grid
-        const initialGrid = Array(rows).fill(null).map(() => Array(cols).fill(' '));
-        setFungusGrid(initialGrid);
-        fungusGridRef.current = initialGrid;
-        setBiologicalColonies([]); // Start with no colonies - biology takes over gradually
-        biologicalColoniesRef.current = [];
-        const initialColorMap = new Map<string, GrowthType>();
-        setBiologicalColorMap(initialColorMap); // Reset color map
-        biologicalColorMapRef.current = initialColorMap;
+      // Don't show text during the initial sequence - it will start at antimony
+      setCorruptedLines([])
       }, 1200)
       
       return
@@ -254,11 +244,8 @@ export default function Home() {
     if (!showCorruption) return
 
     const startTime = Date.now()
-    const showcaseEndTime = 5000 // 5 seconds showcase period - quick to see the bang
-    const cyclesBeforeDecay = 1
-    const decayDuration = 2000 // fade out over 2s
-    // Calculate chaos end time once - random between 5-7 seconds
-    const chaosEndTime = showcaseEndTime + Math.random() * 2000
+    // Start antimony sequence immediately (no initial chaos delay)
+    const chaosEndTime = 0
 
     const interval = setInterval(() => {
       const elapsed = Date.now() - startTime
@@ -699,9 +686,11 @@ export default function Home() {
 
   // --- Pixel-Based Creepy Biological Background ---
   useEffect(() => {
-    // Run biological canvas during chaos phase (before and after explosion)
+    // Only run biological canvas AFTER the explosion (life forming after the bang)
     if (!showCorruption || !backgroundCanvasRef.current) return
-    // Allow canvas to run during chaos phase (initial and after explosion)
+    // Only allow canvas to run after explosion is complete
+    if (explosionCompleteTimeRef.current === null) return
+    // Run during chaos phase after explosion, or during explosion itself
     if (animationPhase !== 'chaos' && animationPhase !== 'explosion') return
 
     const canvas = backgroundCanvasRef.current
@@ -1886,8 +1875,8 @@ export default function Home() {
         />
       )}
 
-      {/* Pixel-Based Creepy Biological Background Canvas */}
-      {showCorruption && (animationPhase === 'chaos' || animationPhase === 'explosion') && (
+      {/* Pixel-Based Creepy Biological Background Canvas - only after explosion */}
+      {showCorruption && explosionCompleteTimeRef.current !== null && (animationPhase === 'chaos' || animationPhase === 'explosion') && (
         <canvas
           ref={backgroundCanvasRef}
           className="biological-canvas"
