@@ -65,8 +65,8 @@ body {
 }
 
 .link a {
-  color: #ff8c00;
-  text-decoration: none;
+  color: #58a6ff;
+  text-decoration: underline;
   display: inline-flex;
   align-items: center;
   gap: 4px;
