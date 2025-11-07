@@ -460,6 +460,7 @@ export default function Home() {
   const [fungusGrid, setFungusGrid] = useState<string[][]>([]);
   const [biologicalColonies, setBiologicalColonies] = useState<GrowthColony[]>([]);
   const [biologicalColorMap, setBiologicalColorMap] = useState<Map<string, GrowthType>>(new Map());
+  const backgroundCanvasRef = useRef<HTMLCanvasElement>(null);
 
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -749,6 +750,326 @@ export default function Home() {
     return () => clearInterval(interval)
   }, [showCorruption])
 
+  // --- Pixel-Based Creepy Biological Background ---
+  useEffect(() => {
+    if (!showCorruption || !backgroundCanvasRef.current) return
+
+    const canvas = backgroundCanvasRef.current
+    const ctx = canvas.getContext('2d', { alpha: false })
+    if (!ctx) return
+
+    // Set canvas size
+    const resizeCanvas = () => {
+      canvas.width = window.innerWidth
+      canvas.height = window.innerHeight
+    }
+    resizeCanvas()
+    window.addEventListener('resize', resizeCanvas)
+
+    // Pixel-based biological entities
+    interface PixelOrganism {
+      x: number
+      y: number
+      vx: number
+      vy: number
+      size: number
+      type: 'spore' | 'mycelium' | 'insect' | 'slime'
+      age: number
+      color: string
+      trail: { x: number; y: number; opacity: number }[]
+    }
+
+    const organisms: PixelOrganism[] = []
+    let growthMap = new Map<string, number | string>() // Track growth intensity and colors per pixel
+
+    // Creepy color palette
+    const colors = {
+      spore: ['#39ff14', '#00ff00', '#32cd32'], // Neon green
+      mycelium: ['#ff1493', '#ff00ff', '#ff69b4'], // Pink/magenta
+      insect: ['#ffb84d', '#ff8c00', '#ffa500'], // Orange
+      slime: ['#00ffff', '#00ced1', '#48d1cc'], // Cyan
+      decay: ['#4b0082', '#8b008b', '#9400d3'] // Purple decay
+    }
+
+    // Initialize organisms
+    const spawnOrganism = (type: PixelOrganism['type'], x?: number, y?: number) => {
+      organisms.push({
+        x: x ?? Math.random() * canvas.width,
+        y: y ?? Math.random() * canvas.height,
+        vx: (Math.random() - 0.5) * 0.5,
+        vy: (Math.random() - 0.5) * 0.5,
+        size: 1 + Math.random() * 2,
+        type,
+        age: 0,
+        color: colors[type][Math.floor(Math.random() * colors[type].length)],
+        trail: []
+      })
+    }
+
+    // Spawn initial organisms at edges
+    for (let i = 0; i < 20; i++) {
+      const side = Math.floor(Math.random() * 4)
+      let x = 0, y = 0
+      if (side === 0) { x = 0; y = Math.random() * canvas.height } // Left
+      else if (side === 1) { x = canvas.width; y = Math.random() * canvas.height } // Right
+      else if (side === 2) { x = Math.random() * canvas.width; y = 0 } // Top
+      else { x = Math.random() * canvas.width; y = canvas.height } // Bottom
+      
+      const types: PixelOrganism['type'][] = ['spore', 'mycelium', 'insect', 'slime']
+      spawnOrganism(types[Math.floor(Math.random() * types.length)], x, y)
+    }
+
+    // Organic growth function - pixel-based with creepy effects
+    const growPixel = (x: number, y: number, intensity: number, color: string) => {
+      const px = Math.floor(x)
+      const py = Math.floor(y)
+      if (px < 0 || px >= canvas.width || py < 0 || py >= canvas.height) return
+
+      const key = `${px},${py}`
+      const currentIntensity = (growthMap.get(key) as number) || 0
+      const newIntensity = Math.min(255, currentIntensity + intensity * 15)
+
+      growthMap.set(key, newIntensity)
+      
+      // Store color info with intensity
+      const colorKey = key + '_color'
+      if (!growthMap.has(colorKey)) {
+        growthMap.set(colorKey, color)
+      } else {
+        // Blend colors for organic mixing
+        const existingColor = growthMap.get(colorKey) as string
+        if (Math.random() < 0.3) {
+          growthMap.set(colorKey, color) // Sometimes override for variation
+        }
+      }
+    }
+
+    // Spread growth from existing pixels
+    const spreadGrowth = () => {
+      const newGrowthMap = new Map(growthMap)
+      growthMap.forEach((value, key) => {
+        if (key.includes('_color')) return // Skip color entries
+        const intensity = typeof value === 'number' ? value : 0
+        if (intensity > 10) {
+          const [x, y] = key.split(',').map(Number)
+          // Spread to neighbors
+          for (let dx = -1; dx <= 1; dx++) {
+            for (let dy = -1; dy <= 1; dy++) {
+              if (dx === 0 && dy === 0) continue
+              const nx = x + dx
+              const ny = y + dy
+              const nKey = `${nx},${ny}`
+              if (nx >= 0 && nx < canvas.width && ny >= 0 && ny < canvas.height) {
+                const neighborValue = newGrowthMap.get(nKey)
+                const neighborIntensity = typeof neighborValue === 'number' ? neighborValue : 0
+                if (neighborIntensity < intensity * 0.7 && Math.random() < 0.3) {
+                  newGrowthMap.set(nKey, intensity * 0.7)
+                  // Copy color if exists
+                  const colorKey = key + '_color'
+                  const neighborColorKey = nKey + '_color'
+                  if (growthMap.has(colorKey) && !newGrowthMap.has(neighborColorKey)) {
+                    newGrowthMap.set(neighborColorKey, growthMap.get(colorKey)!)
+                  }
+                }
+              }
+            }
+          }
+        }
+      })
+      growthMap = newGrowthMap
+    }
+
+    let animationFrame: number
+    let lastTime = Date.now()
+
+    const animate = () => {
+      const currentTime = Date.now()
+      const deltaTime = Math.min(100, currentTime - lastTime)
+      lastTime = currentTime
+
+      // Clear with dark background
+      ctx.fillStyle = '#0a0a0a'
+      ctx.fillRect(0, 0, canvas.width, canvas.height)
+
+      // Decay old growth slightly
+      growthMap.forEach((value, key) => {
+        if (key.includes('_color')) return
+        const intensity = typeof value === 'number' ? value : 0
+        if (intensity > 5) {
+          growthMap.set(key, intensity * 0.999)
+        } else {
+          growthMap.delete(key)
+          growthMap.delete(key + '_color')
+        }
+      })
+
+      // Update and render organisms
+      organisms.forEach((org, idx) => {
+        // Movement with organic patterns
+        org.age++
+        org.vx += (Math.random() - 0.5) * 0.1
+        org.vy += (Math.random() - 0.5) * 0.1
+        org.vx *= 0.98
+        org.vy *= 0.98
+
+        // Boundary behavior - wrap around or bounce
+        if (org.x < 0 || org.x > canvas.width) org.vx *= -1
+        if (org.y < 0 || org.y > canvas.height) org.vy *= -1
+        org.x = Math.max(0, Math.min(canvas.width, org.x + org.vx))
+        org.y = Math.max(0, Math.min(canvas.height, org.y + org.vy))
+
+        // Leave growth trail - more aggressive and creepy
+        if (org.type === 'spore' || org.type === 'mycelium') {
+          growPixel(org.x, org.y, 0.8, org.color)
+          // Spread from organism in organic patterns
+          for (let i = 0; i < 5; i++) {
+            const angle = Math.random() * Math.PI * 2
+            const dist = Math.random() * 4
+            growPixel(
+              org.x + Math.cos(angle) * dist,
+              org.y + Math.sin(angle) * dist,
+              0.4,
+              org.color
+            )
+          }
+          // Tendril-like growth
+          if (Math.random() < 0.3) {
+            const tendrilAngle = Math.atan2(org.vy, org.vx)
+            for (let i = 0; i < 3; i++) {
+              growPixel(
+                org.x + Math.cos(tendrilAngle + (i - 1) * 0.3) * (2 + i),
+                org.y + Math.sin(tendrilAngle + (i - 1) * 0.3) * (2 + i),
+                0.3,
+                org.color
+              )
+            }
+          }
+        }
+
+        // Insects leave different trails
+        if (org.type === 'insect') {
+          org.trail.push({ x: org.x, y: org.y, opacity: 1 })
+          if (org.trail.length > 10) org.trail.shift()
+          org.trail.forEach((point, i) => {
+            const opacity = (i / org.trail.length) * 0.3
+            growPixel(point.x, point.y, opacity, org.color)
+          })
+        }
+
+        // Slime spreads more aggressively
+        if (org.type === 'slime') {
+          for (let i = 0; i < 5; i++) {
+            const angle = Math.random() * Math.PI * 2
+            const dist = Math.random() * 5
+            growPixel(
+              org.x + Math.cos(angle) * dist,
+              org.y + Math.sin(angle) * dist,
+              0.4,
+              org.color
+            )
+          }
+        }
+
+        // Render organism as creepy pixel entity
+        ctx.fillStyle = org.color
+        ctx.globalAlpha = 0.9
+        const px = Math.floor(org.x)
+        const py = Math.floor(org.y)
+        
+        // Draw organism with slight glow
+        ctx.shadowBlur = 2
+        ctx.shadowColor = org.color
+        ctx.fillRect(px, py, org.size, org.size)
+        
+        // Add creepy details for insects
+        if (org.type === 'insect' && org.size > 1.5) {
+          ctx.fillStyle = '#000000'
+          ctx.globalAlpha = 0.5
+          ctx.fillRect(px + 0.5, py + 0.5, 0.5, 0.5) // Eye
+        }
+        
+        ctx.shadowBlur = 0
+        ctx.globalAlpha = 1
+
+        // Reproduce occasionally
+        if (org.age > 100 && Math.random() < 0.01) {
+          spawnOrganism(org.type, org.x + (Math.random() - 0.5) * 50, org.y + (Math.random() - 0.5) * 50)
+        }
+
+        // Death
+        if (org.age > 1000 && Math.random() < 0.001) {
+          organisms.splice(idx, 1)
+        }
+      })
+
+      // Spread growth organically
+      spreadGrowth()
+
+      // Render pixel data with creepy organic patterns
+      const imageData = ctx.createImageData(canvas.width, canvas.height)
+      const colorMap = new Map<string, string>()
+      
+      // First pass: collect colors
+      growthMap.forEach((intensity, key) => {
+        if (!key.includes('_color')) {
+          const colorKey = key + '_color'
+          const storedColor = growthMap.get(colorKey)
+          if (storedColor) {
+            colorMap.set(key, storedColor as string)
+          }
+        }
+      })
+      
+      // Render pixels
+      growthMap.forEach((value, key) => {
+        if (key.includes('_color')) return
+        
+        const intensity = typeof value === 'number' ? value : 0
+        if (intensity <= 5) return
+        
+        const [x, y] = key.split(',').map(Number)
+        const idx = (y * canvas.width + x) * 4
+        if (idx >= 0 && idx < imageData.data.length) {
+          const color = colorMap.get(key) || '#39ff14'
+          const hex = color.replace('#', '')
+          const r = parseInt(hex.substr(0, 2), 16)
+          const g = parseInt(hex.substr(2, 2), 16)
+          const b = parseInt(hex.substr(4, 2), 16)
+          
+          // Creepy pulsing effect
+          const pulse = Math.sin(Date.now() / 1000 + x * 0.01 + y * 0.01) * 0.1 + 0.9
+          const alpha = Math.min(255, intensity * pulse)
+          
+          // Blend with existing (for organic growth)
+          const existingR = imageData.data[idx] || 0
+          const existingG = imageData.data[idx + 1] || 0
+          const existingB = imageData.data[idx + 2] || 0
+          
+          imageData.data[idx] = Math.min(255, existingR * 0.7 + r * alpha / 255)
+          imageData.data[idx + 1] = Math.min(255, existingG * 0.7 + g * alpha / 255)
+          imageData.data[idx + 2] = Math.min(255, existingB * 0.7 + b * alpha / 255)
+          imageData.data[idx + 3] = Math.min(255, alpha)
+        }
+      })
+      ctx.putImageData(imageData, 0, 0)
+
+      // Spawn new organisms occasionally
+      if (Math.random() < 0.02) {
+        const types: PixelOrganism['type'][] = ['spore', 'mycelium', 'insect', 'slime']
+        spawnOrganism(types[Math.floor(Math.random() * types.length)])
+      }
+
+      animationFrame = requestAnimationFrame(animate)
+    }
+
+    animate()
+
+    return () => {
+      window.removeEventListener('resize', resizeCanvas)
+      cancelAnimationFrame(animationFrame)
+    }
+  }, [showCorruption])
+
   return (
     <main 
       className="container" 
@@ -758,41 +1079,23 @@ export default function Home() {
         position: 'relative'
       }}
     >
-      {/* Background art layer */}
-      {showCorruption && backgroundArt.length > 0 && (
-        <div className="background-art">
-          {backgroundArt.map((line, i) => (
-            <div key={i}>{line}</div>
-          ))}
-        </div>
+      {/* Pixel-Based Creepy Biological Background Canvas */}
+      {showCorruption && (
+        <canvas
+          ref={backgroundCanvasRef}
+          className="biological-canvas"
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100vw',
+            height: '100vh',
+            zIndex: 5,
+            pointerEvents: 'none',
+            opacity: 0.6
+          }}
+        />
       )}
-
-      {/* --- NEW: Fungus Layer with Colors --- */}
-      {showCorruption && fungusGrid.length > 0 && (
-        <div className="fungus-grid">
-          {fungusGrid.map((row, i) => (
-            <div key={i}>
-              {row.map((cell, j) => {
-                const cellKey = `${i},${j}`;
-                const colonyType = biologicalColorMap.get(cellKey);
-                const color = colonyType ? growthColors[colonyType] : '#ffb84d';
-                return (
-                  <span key={j} style={{ color }} className="fungus-cell">
-                    {cell}
-                  </span>
-                );
-              })}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* --- NEW: Ant Sprites Layer --- */}
-      {showCorruption && sprites.map((sprite, i) => (
-        <div key={i} className="sprite" style={{ left: `${sprite.x}%`, top: `${sprite.y}%` }}>
-          {sprite.art}
-        </div>
-      ))}
       
       <div className="terminal" style={{
         position: 'relative',

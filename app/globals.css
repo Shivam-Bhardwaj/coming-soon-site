@@ -92,40 +92,9 @@ body {
   opacity: 0.7;
 }
 
-.fungus-grid {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  z-index: 20;
-  pointer-events: none;
-  font-family: 'Courier New', Courier, monospace;
-  font-size: 4px;
-  line-height: 4px;
-  opacity: 0.7;
-  white-space: pre;
-  letter-spacing: 0.1px;
-  overflow: hidden;
-}
-
-.fungus-cell {
-  display: inline-block;
-}
-
-.background-art {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  z-index: 10;
-  pointer-events: none;
-  font-family: 'Courier New', Courier, monospace;
-  font-size: 12px;
-  line-height: 12px;
-  color: #ffb84d;
-  white-space: pre;
-  opacity: 0.3;
+.biological-canvas {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
 }
 
 @media (max-width: 768px) {
