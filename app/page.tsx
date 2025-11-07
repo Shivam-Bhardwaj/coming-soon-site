@@ -11,6 +11,7 @@ import {
   getRandomExtendedChar,
   getRandomAsciiArt,
 } from '../lib/sim'
+import { calculateGrowthMetrics } from '../lib/metrics'
 
 const messages = [
   '> coming soon is coming soon',
@@ -113,8 +114,11 @@ export default function Home() {
   const [biologicalColonies, setBiologicalColonies] = useState<GrowthColony[]>([]);
   const [biologicalColorMap, setBiologicalColorMap] = useState<Map<string, GrowthType>>(new Map());
   const [perfSnapshot, setPerfSnapshot] = useState<PerfSnapshot[]>([]);
-  const ecosystemStateRef = useRef({ clouds: 0, apex: 0, wave: '-' })
+  const ecosystemStateRef = useRef({ clouds: 0, apex: 0, wave: '-', coverage: 0, avgIntensity: 0, entropy: 0, avgEnergy: 0, diversity: 0 })
   const [ecosystemHUD, setEcosystemHUD] = useState(ecosystemStateRef.current)
+  const growthMetricsRef = useRef({ coverage: 0, avgIntensity: 0, entropy: 0 })
+  const organismMetricsRef = useRef({ avgEnergy: 0, diversity: 0 })
+  const metricsFrameRef = useRef(0)
   const backgroundCanvasRef = useRef<HTMLCanvasElement>(null);
 
   // Adaptive performance refs
@@ -1309,10 +1313,21 @@ export default function Home() {
       recordPerf('organismLoop', performance.now() - organismsStart)
 
       const apexCount = organisms.reduce((count, org) => count + (org.type === 'apex' ? 1 : 0), 0)
+      const totalEnergy = organisms.reduce((sum, org) => sum + org.energy, 0)
+      const diversity = new Set(organisms.map(org => org.type)).size
+      organismMetricsRef.current = {
+        avgEnergy: organisms.length ? totalEnergy / organisms.length : 0,
+        diversity,
+      }
       ecosystemStateRef.current = {
         clouds: nutrientClouds.length,
         apex: apexCount,
-        wave: decayWave ? `${decayWave.axis}:${Math.round(decayWave.position)}` : '-'
+        wave: decayWave ? `${decayWave.axis}:${Math.round(decayWave.position)}` : '-',
+        coverage: growthMetricsRef.current.coverage,
+        avgIntensity: growthMetricsRef.current.avgIntensity,
+        entropy: growthMetricsRef.current.entropy,
+        avgEnergy: organismMetricsRef.current.avgEnergy,
+        diversity: organismMetricsRef.current.diversity,
       }
 
       // Spread growth organically
@@ -1331,6 +1346,27 @@ export default function Home() {
       ensureAmbientGrowth(Math.max(26000, Math.floor(growthMapCapRef.current * renderBudgetRef.current)))
       recordPerf('ambientSeeding', performance.now() - ambientStart)
       applyDecayWave()
+
+      metricsFrameRef.current = (metricsFrameRef.current + 1) % 12
+      if (metricsFrameRef.current === 0) {
+        const samples: number[] = []
+        const sampleLimit = 1500
+        let activeCells = 0
+        growthMap.forEach((value, key) => {
+          if (key.includes('_color')) return
+          if (typeof value !== 'number') return
+          activeCells++
+          if (samples.length < sampleLimit) {
+            samples.push(value)
+          } else {
+            const idx = Math.floor(Math.random() * activeCells)
+            if (idx < sampleLimit) {
+              samples[idx] = value
+            }
+          }
+        })
+        growthMetricsRef.current = calculateGrowthMetrics(samples, canvas.width * canvas.height, activeCells)
+      }
 
       // Render pixel data - OPTIMIZED: Single pass, limit iterations, batch operations
       const renderGrowthStart = performance.now()
@@ -1535,6 +1571,12 @@ export default function Home() {
           </div>
           <div className="perf-row">
             clouds {ecosystemHUD.clouds} | apex {ecosystemHUD.apex} | wave {ecosystemHUD.wave}
+          </div>
+          <div className="perf-row">
+            cover {(ecosystemHUD.coverage * 100).toFixed(1)}% | avgI {ecosystemHUD.avgIntensity.toFixed(0)} | entropy {ecosystemHUD.entropy.toFixed(2)}
+          </div>
+          <div className="perf-row">
+            energy {ecosystemHUD.avgEnergy.toFixed(1)} | diversity {ecosystemHUD.diversity}
           </div>
           {perfSnapshot.map(({ name, avg, max }) => (
             <div className="perf-row" key={name}>
