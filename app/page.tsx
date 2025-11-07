@@ -35,7 +35,7 @@ export default function Home() {
         setDisplayedLines([...displayedLines, currentText])
         setCurrentText('')
         setCurrentLineIndex(currentLineIndex + 1)
-      }, 350)
+      }, 600)
 
       return () => clearTimeout(timer)
     }
