@@ -36,12 +36,27 @@ const extendedASCII = {
 
 // --- NEW: Biological Sprites & Patterns ---
 const antSprites = ['_@_v', '_@_>', '<_@_'];
+const spiderSprites = ['/\\oo/\\', 'oo'];
+const plantSprites = ['{*}','[*]','{*}'];
 
 const fungusPatterns = {
   spores: ['.', '·', '•'],
   growth: ['░', '▒', '▓', '█'],
   tendrils: ['/', '\\', '-', '|']
 };
+
+// Sprite types with behaviors
+type SpriteType = 'ant' | 'spider' | 'plant';
+
+interface Sprite {
+  type: SpriteType;
+  art: string;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  age: number; // For reproduction/cannibalism
+}
 
 // ASCII art patterns for chaos
 const asciiArtPatterns = [
@@ -256,8 +271,8 @@ function generateRandomArt(width: number, height: number): string[] {
 }
 
 // Phase 1: Controlled corruption (maintains structure)
-function controlledCorruption(text: string, preserveLast: boolean): string {
-  if (preserveLast) return text // Never corrupt X link
+function controlledCorruption(text: string): string {
+  if (text.trim() === '' || text === '>') return text // Never corrupt X link
   
   const words = text.match(/(>|[^\s]+|\s+)/g) || []
   let hasEnglish = false
@@ -296,8 +311,8 @@ function controlledCorruption(text: string, preserveLast: boolean): string {
 }
 
 // Phase 2: Chaos corruption (breaks all rules)
-function chaosCorruption(text: string, intensity: number, preserveLast: boolean): string {
-  if (preserveLast) return text // Never corrupt X link
+function chaosCorruption(text: string, intensity: number): string {
+  if (text.trim() === '' || text === '>') return text // Never corrupt X link
   
   let result = text
   
@@ -353,8 +368,7 @@ export default function Home() {
   const [showXLink, setShowXLink] = useState(false)
   const [phaseIntensity, setPhaseIntensity] = useState(0)
   const [backgroundArt, setBackgroundArt] = useState<string[]>([])
-  // --- NEW: State for Sprites ---
-  const [sprites, setSprites] = useState<{art: string, x: number, y: number, vx: number, vy: number}[]>([]);
+  const [sprites, setSprites] = useState<Sprite[]>([]);
   const [fungusGrid, setFungusGrid] = useState<string[][]>([]);
 
   const containerRef = useRef<HTMLDivElement>(null)
@@ -406,68 +420,66 @@ export default function Home() {
     if (!showCorruption) return
 
     const startTime = Date.now()
+    const showcaseEndTime = 30000 // 30 seconds showcase period
 
     const interval = setInterval(() => {
-      // Precise 10-second sine wave cycle (0 -> 1 -> 0)
       const elapsed = Date.now() - startTime
-      const intensity = (Math.sin(elapsed / (10000 / (2 * Math.PI))) + 1) / 2
+      const isShowcase = elapsed < showcaseEndTime
+      
+      // Precise 10-second sine wave cycle (0 -> 1 -> 0)
+      // In showcase mode, make cycles slightly faster to show all phases
+      const cycleSpeed = isShowcase ? 8000 : 10000 // 8s cycles in showcase, 10s after
+      const intensity = (Math.sin(elapsed / (cycleSpeed / (2 * Math.PI))) + 1) / 2
       setPhaseIntensity(intensity)
 
       let currentPhase: 'controlled' | 'chaos' | 'art' = 'controlled'
       if (intensity > 0.3) currentPhase = 'chaos'
       if (intensity > 0.75) currentPhase = 'art'
       
+      // Boost intensity in showcase mode to ensure all features are visible
+      const effectiveIntensity = isShowcase ? Math.min(1, intensity * 1.2) : intensity
+      
       setCorruptedLines((prev) => {
         let linesToCorrupt = [...messages] // Start from original messages for stability
-
+  
         if (currentPhase === 'controlled') {
           return linesToCorrupt.map((line) => {
             // Fade out corruption as intensity drops
-            if (Math.random() < intensity * 0.3) {
-              return controlledCorruption(line, false)
+            if (Math.random() < effectiveIntensity * 0.3) {
+              return controlledCorruption(line)
             }
             return line
           })
         } else if (currentPhase === 'chaos') {
-          // --- NEW: Ant Sprite Logic ---
-          if (Math.random() < intensity * 0.1) {
-            setSprites(prev => [...prev, {
-              art: antSprites[Math.floor(Math.random() * antSprites.length)],
-              x: Math.random() * 100,
-              y: Math.random() * 100,
-              vx: (Math.random() - 0.5) * 0.5,
-              vy: (Math.random() - 0.5) * 0.5,
-            }].slice(-20)); // Max 20 ants
-          }
-
-          if (Math.random() < intensity * 0.2) {
+          // More aggressive in showcase mode
+          const spawnRate = isShowcase ? effectiveIntensity * 0.3 : effectiveIntensity * 0.2
+          if (Math.random() < spawnRate) {
             const newLine = Array(Math.floor(Math.random() * 30)).fill(0)
               .map(() => getRandomExtendedChar()).join('')
             linesToCorrupt.push(newLine)
           }
           
           return linesToCorrupt.map((line) => {
-            if (Math.random() < intensity * 0.7) {
-              return chaosCorruption(line, intensity, false)
+            if (Math.random() < effectiveIntensity * 0.7) {
+              return chaosCorruption(line, effectiveIntensity)
             }
             return line
           }).slice(-15)
         } else { // Art phase
-          // --- NEW: Fungus Growth Logic ---
-          if (Math.random() < intensity) {
-            setFungusGrid(grid => growFungus(grid, intensity));
+          // Ensure art patterns are visible in showcase
+          if (Math.random() < effectiveIntensity || (isShowcase && Math.random() < 0.3)) {
+            setFungusGrid(grid => growFungus(grid, effectiveIntensity))
           }
-
-          if (Math.random() < intensity * 0.5) {
+          if (Math.random() < effectiveIntensity || (isShowcase && Math.random() < 0.3)) {
             setBackgroundArt(generateBeautifulPattern())
           }
-          if (Math.random() < intensity * 0.6) {
+          if (Math.random() < effectiveIntensity * 0.6 || (isShowcase && Math.random() < 0.2)) {
             linesToCorrupt.push(...fullScreenPatterns[Math.floor(Math.random() * fullScreenPatterns.length)].split('\n'))
           }
           
           return linesToCorrupt.map((line) => {
-            if (Math.random() < intensity) {
-              return chaosCorruption(line, intensity, false)
+            if (Math.random() < effectiveIntensity) {
+              return chaosCorruption(line, effectiveIntensity)
             }
             return line
           }).slice(-25)
@@ -475,12 +487,158 @@ export default function Home() {
       })
 
       // Update sprite positions
-      setSprites(prev => prev.map(sprite => ({
-        ...sprite,
-        x: (sprite.x + sprite.vx + 100) % 100,
-        y: (sprite.y + sprite.vy + 100) % 100,
-      })).filter(() => Math.random() > 0.005)); // Ants have a small chance of dying
+      setSprites(prev => prev.map(sprite => {
+        let newX = sprite.x + sprite.vx
+        let newY = sprite.y + sprite.vy
 
+        // Boundary bounce
+        if (newX < 0 || newX > 100) sprite.vx = -sprite.vx
+        if (newY < 0 || newY > 100) sprite.vy = -sprite.vy
+
+        newX = Math.max(0, Math.min(100, newX))
+        newY = Math.max(0, Math.min(100, newY))
+
+        return {...sprite, x: newX, y: newY}
+      }))
+
+      // Sprite Behaviors
+      setSprites(prev => {
+        let newSprites = [...prev]
+        const isShowcase = elapsed < showcaseEndTime
+        const effectiveIntensity = isShowcase ? Math.min(1, intensity * 1.2) : intensity
+
+        // In showcase mode, ensure sprites are active early
+        if (isShowcase && newSprites.length < 10 && Math.random() < 0.3) {
+          // Force spawn diverse sprites in showcase
+          const types: SpriteType[] = ['ant', 'spider', 'plant']
+          const spawnType = types[Math.floor(Math.random() * types.length)]
+          newSprites.push({
+            type: spawnType,
+            art: spawnType === 'ant' ? antSprites[Math.floor(Math.random() * antSprites.length)] 
+                : spawnType === 'spider' ? spiderSprites[Math.floor(Math.random() * spiderSprites.length)] 
+                : plantSprites[Math.floor(Math.random() * plantSprites.length)],
+            x: Math.random() * 100,
+            y: Math.random() * 100,
+            vx: (Math.random() - 0.5) * 0.5,
+            vy: (Math.random() - 0.5) * 0.5,
+            age: 0
+          })
+        }
+
+        // Reproduction (ants near plants)
+        newSprites.forEach((sprite, i) => {
+          if (sprite.type === 'ant' && sprite.age > 5 && Math.random() < effectiveIntensity * 0.05) {
+            newSprites.push({
+              type: 'ant',
+              art: antSprites[Math.floor(Math.random() * antSprites.length)],
+              x: sprite.x + (Math.random() - 0.5) * 5,
+              y: sprite.y + (Math.random() - 0.5) * 5,
+              vx: (Math.random() - 0.5) * 0.5,
+              vy: (Math.random() - 0.5) * 0.5,
+              age: 0
+            })
+          }
+
+          // Preying (spiders eat ants)
+          if (sprite.type === 'spider') {
+            newSprites.forEach((other, j) => {
+              if (other.type === 'ant' && i !== j) {
+                const dx = other.x - sprite.x
+                const dy = other.y - sprite.y
+                const dist = Math.sqrt(dx * dx + dy * dy)
+                const catchChance = isShowcase ? effectiveIntensity * 0.15 : effectiveIntensity * 0.1
+                if (dist < 5 && Math.random() < catchChance) {
+                  // "Eat" the ant
+                  newSprites.splice(j, 1)
+                  // Spider "grows" - change art or speed
+                  sprite.vx *= 1.1
+                  sprite.vy *= 1.1
+                } else if (dist < 20) {
+                  // Chase - more aggressive in showcase
+                  const chaseSpeed = isShowcase ? 0.3 : 0.2
+                  sprite.vx += (dx / dist) * chaseSpeed
+                  sprite.vy += (dy / dist) * chaseSpeed
+                }
+              }
+            })
+          }
+
+          // Cannibalizing (ants eat plants)
+          if (sprite.type === 'ant') {
+            newSprites.forEach((other, j) => {
+              if (other.type === 'plant' && i !== j) {
+                const dx = other.x - sprite.x
+                const dy = other.y - sprite.y
+                const dist = Math.sqrt(dx * dx + dy * dy)
+                const eatChance = isShowcase ? effectiveIntensity * 0.15 : effectiveIntensity * 0.1
+                if (dist < 5 && Math.random() < eatChance) {
+                  // "Eat" the plant and reproduce
+                  newSprites.splice(j, 1)
+                  newSprites.push({
+                    type: 'ant',
+                    art: antSprites[Math.floor(Math.random() * antSprites.length)],
+                    x: sprite.x + (Math.random() - 0.5) * 5,
+                    y: sprite.y + (Math.random() - 0.5) * 5,
+                    vx: (Math.random() - 0.5) * 0.5,
+                    vy: (Math.random() - 0.5) * 0.5,
+                    age: 0
+                  })
+                } else if (dist < 20) {
+                  // Move towards plant
+                  sprite.vx += (dx / dist) * 0.1
+                  sprite.vy += (dy / dist) * 0.1
+                }
+              }
+            })
+          }
+
+          // Age all sprites
+          sprite.age += 1
+
+          // Small chance of death for balance
+          if (Math.random() < 0.01) {
+            newSprites.splice(i, 1)
+          }
+        })
+
+        // Spawn new sprites based on intensity
+        // Higher spawn rate in showcase mode
+        const spawnRate = isShowcase ? effectiveIntensity * 0.08 : effectiveIntensity * 0.05
+        if (Math.random() < spawnRate) {
+          const newSpriteType: SpriteType = ['ant', 'spider', 'plant'][Math.floor(Math.random() * 3)] as SpriteType
+          const newSprite = {
+            type: newSpriteType,
+            art: newSpriteType === 'ant' ? antSprites[Math.floor(Math.random() * antSprites.length)] 
+                : newSpriteType === 'spider' ? spiderSprites[Math.floor(Math.random() * spiderSprites.length)] 
+                : plantSprites[Math.floor(Math.random() * plantSprites.length)],
+            x: Math.random() * 100,
+            y: Math.random() * 100,
+            vx: (Math.random() - 0.5) * 0.5,
+            vy: (Math.random() - 0.5) * 0.5,
+            age: 0
+          }
+          newSprites.push(newSprite)
+        }
+
+        // After 30 seconds, introduce variations for patient viewers
+        if (!isShowcase && elapsed > showcaseEndTime) {
+          // Occasional "mutations" - rare sprite behaviors
+          if (Math.random() < 0.001) {
+            // Rare: Giant sprite
+            newSprites.push({
+              type: 'ant',
+              art: '█ANT█',
+              x: Math.random() * 100,
+              y: Math.random() * 100,
+              vx: (Math.random() - 0.5) * 0.3,
+              vy: (Math.random() - 0.5) * 0.3,
+              age: 0
+            })
+          }
+        }
+
+        return newSprites.slice(-50) // Limit to 50 sprites for performance
+      })
     }, 100)
 
     return () => clearInterval(interval)
