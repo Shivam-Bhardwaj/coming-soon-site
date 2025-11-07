@@ -65,12 +65,22 @@ body {
 }
 
 .link a {
-  color: #58a6ff;
+  color: #ff8c00;
   text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  transition: opacity 0.2s;
 }
 
 .link a:hover {
-  text-decoration: underline;
+  opacity: 0.8;
+}
+
+.link-prompt {
+  color: #ff8c00;
+  margin-right: 4px;
 }
 
 @media (max-width: 768px) {
