@@ -221,11 +221,26 @@ const growthPatterns: Record<GrowthType, string[]> = {
   algae: ['*', '✱', '✲', '✳', '✴', '✵', '✶', '✷', '✸', '✹', '✺', '✻', '✼', '✽', '✾', '✿', '❀', '❁', '❂', '❃', '❄', '❅', '❆', '❇', '❈', '❉', '❊', '❋']
 };
 
+// Color mapping for each growth type
+const growthColors: Record<GrowthType, string> = {
+  fungus: '#ffb84d', // Bright orange
+  slime: '#39ff14', // Neon green
+  mold: '#ff1493', // Bright pink/magenta
+  mycelium: '#00ffff', // Cyan
+  algae: '#ffff00' // Bright yellow
+};
+
 // --- Multi-Colony Biological Takeover System ---
-function growBiologicalColonies(grid: string[][], intensity: number, colonies: GrowthColony[]): { grid: string[][], colonies: GrowthColony[] } {
+function growBiologicalColonies(
+  grid: string[][], 
+  intensity: number, 
+  colonies: GrowthColony[],
+  colorMap: Map<string, GrowthType>
+): { grid: string[][], colonies: GrowthColony[], colorMap: Map<string, GrowthType> } {
   const newGrid = grid.map(row => [...row]);
   const rows = newGrid.length;
   const cols = newGrid[0].length;
+  const newColorMap = new Map(colorMap);
   
   let activeColonies = [...colonies];
   
@@ -246,6 +261,7 @@ function growBiologicalColonies(grid: string[][], intensity: number, colonies: G
       
       const patterns = growthPatterns[type];
       newGrid[r][c] = patterns[0];
+      newColorMap.set(`${r},${c}`, type);
       activeColonies.push({
         type,
         cells: [[r, c]],
@@ -281,12 +297,17 @@ function growBiologicalColonies(grid: string[][], intensity: number, colonies: G
           if (isEmpty && Math.random() < effectiveSpreadRate) {
             // New growth
             newGrid[nr][nc] = patterns[Math.floor(Math.random() * patterns.length)];
+            newColorMap.set(`${nr},${nc}`, colony.type);
             newCells.push([nr, nc]);
           } else if (isSameType && Math.random() < effectiveSpreadRate * 0.4) {
             // Densify existing growth
             const currentIndex = patterns.indexOf(cellValue);
             if (currentIndex < patterns.length - 1) {
               newGrid[nr][nc] = patterns[currentIndex + 1];
+            }
+            // Ensure color is set
+            if (!newColorMap.has(`${nr},${nc}`)) {
+              newColorMap.set(`${nr},${nc}`, colony.type);
             }
           }
         }
@@ -300,19 +321,7 @@ function growBiologicalColonies(grid: string[][], intensity: number, colonies: G
     };
   });
   
-  // Colonies can merge or compete
-  // Remove duplicate cells (when colonies meet)
-  const allCells = new Map<string, GrowthType>();
-  activeColonies.forEach(colony => {
-    colony.cells.forEach(([r, c]) => {
-      const key = `${r},${c}`;
-      if (!allCells.has(key)) {
-        allCells.set(key, colony.type);
-      }
-    });
-  });
-  
-  return { grid: newGrid, colonies: activeColonies };
+  return { grid: newGrid, colonies: activeColonies, colorMap: newColorMap };
 }
 
 
@@ -450,6 +459,7 @@ export default function Home() {
   const [sprites, setSprites] = useState<Sprite[]>([]);
   const [fungusGrid, setFungusGrid] = useState<string[][]>([]);
   const [biologicalColonies, setBiologicalColonies] = useState<GrowthColony[]>([]);
+  const [biologicalColorMap, setBiologicalColorMap] = useState<Map<string, GrowthType>>(new Map());
 
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -470,6 +480,7 @@ export default function Home() {
         const rows = Math.floor(window.innerHeight / 12); // Finer grid
         setFungusGrid(Array(rows).fill(null).map(() => Array(cols).fill(' ')));
         setBiologicalColonies([]); // Start with no colonies - biology takes over gradually
+        setBiologicalColorMap(new Map()); // Reset color map
       }, 1200)
       
       return
@@ -534,9 +545,10 @@ export default function Home() {
         } else if (currentPhase === 'chaos') {
           // Biology starts taking over in chaos phase
           if (Math.random() < effectiveIntensity * 0.6) {
-            const result = growBiologicalColonies(fungusGrid, effectiveIntensity * 0.8, biologicalColonies);
+            const result = growBiologicalColonies(fungusGrid, effectiveIntensity * 0.8, biologicalColonies, biologicalColorMap);
             setFungusGrid(result.grid);
             setBiologicalColonies(result.colonies);
+            setBiologicalColorMap(result.colorMap);
           }
           
           // More aggressive in showcase mode
@@ -555,9 +567,10 @@ export default function Home() {
           }).slice(-15)
         } else { // Art phase - Biology fully takes over
           // Aggressive biological takeover - always grow in art phase
-          const result = growBiologicalColonies(fungusGrid, effectiveIntensity, biologicalColonies);
+          const result = growBiologicalColonies(fungusGrid, effectiveIntensity, biologicalColonies, biologicalColorMap);
           setFungusGrid(result.grid);
           setBiologicalColonies(result.colonies);
+          setBiologicalColorMap(result.colorMap);
           
           // Ensure art patterns are visible in showcase
           if (Math.random() < effectiveIntensity || (isShowcase && Math.random() < 0.3)) {
@@ -754,11 +767,22 @@ export default function Home() {
         </div>
       )}
 
-      {/* --- NEW: Fungus Layer --- */}
+      {/* --- NEW: Fungus Layer with Colors --- */}
       {showCorruption && fungusGrid.length > 0 && (
         <div className="fungus-grid">
           {fungusGrid.map((row, i) => (
-            <div key={i}>{row.join('')}</div>
+            <div key={i}>
+              {row.map((cell, j) => {
+                const cellKey = `${i},${j}`;
+                const colonyType = biologicalColorMap.get(cellKey);
+                const color = colonyType ? growthColors[colonyType] : '#ffb84d';
+                return (
+                  <span key={j} style={{ color }} className="fungus-cell">
+                    {cell}
+                  </span>
+                );
+              })}
+            </div>
           ))}
         </div>
       )}
@@ -774,25 +798,48 @@ export default function Home() {
         position: 'relative',
         zIndex: 1
       }}>
-        {(!showCorruption ? displayedLines : corruptedLines).map((line, index) => (
-          <div 
-            key={index} 
-            className="line"
-            style={{
-              // All chaotic styles are applied here now
-              transform: showCorruption && Math.random() < phaseIntensity * 0.5 
-                ? `translateX(${(Math.random() * 40 - 20) * phaseIntensity}px) rotate(${(Math.random() * 10 - 5) * phaseIntensity}deg)` 
-                : 'none',
-              fontSize: showCorruption && phaseIntensity > 0.8 && Math.random() < phaseIntensity
-                ? `${10 + Math.random() * 20}px` 
-                : '14px',
-              opacity: showCorruption && phaseIntensity > 0.8 ? 0.4 + Math.random() * 0.6 : 1,
-              filter: showCorruption && phaseIntensity > 0.8 && Math.random() < phaseIntensity * 0.4 ? 'blur(1.5px)' : 'none'
-            }}
-          >
-            <span className="text">{line}</span>
-          </div>
-        ))}
+        {(!showCorruption ? displayedLines : corruptedLines).map((line, index) => {
+          // Color variations for corruption
+          const corruptionColors = ['#ffb84d', '#39ff14', '#00ffff', '#ff1493', '#ffff00', '#ff00ff', '#00ff00'];
+          const shouldColorCorrupt = showCorruption && phaseIntensity > 0.3;
+          
+          return (
+            <div 
+              key={index} 
+              className="line"
+              style={{
+                // All chaotic styles are applied here now
+                transform: showCorruption && Math.random() < phaseIntensity * 0.5 
+                  ? `translateX(${(Math.random() * 40 - 20) * phaseIntensity}px) rotate(${(Math.random() * 10 - 5) * phaseIntensity}deg)` 
+                  : 'none',
+                fontSize: showCorruption && phaseIntensity > 0.8 && Math.random() < phaseIntensity
+                  ? `${10 + Math.random() * 20}px` 
+                  : '14px',
+                opacity: showCorruption && phaseIntensity > 0.8 ? 0.4 + Math.random() * 0.6 : 1,
+                filter: showCorruption && phaseIntensity > 0.8 && Math.random() < phaseIntensity * 0.4 ? 'blur(1.5px)' : 'none'
+              }}
+            >
+              {shouldColorCorrupt ? (
+                <span>
+                  {line.split('').map((char, charIndex) => (
+                    <span 
+                      key={charIndex} 
+                      style={{ 
+                        color: Math.random() < phaseIntensity * 0.3 
+                          ? corruptionColors[Math.floor(Math.random() * corruptionColors.length)]
+                          : '#ffb84d'
+                      }}
+                    >
+                      {char}
+                    </span>
+                  ))}
+                </span>
+              ) : (
+                <span className="text">{line}</span>
+              )}
+            </div>
+          );
+        })}
         {isTyping && (
           <div className="line">
             <span className="text">{currentText}</span>
@@ -804,7 +851,7 @@ export default function Home() {
         {showXLink && (
           <div className="line" style={{ transform: 'none', marginTop: '4px' }}>
             <a href="https://x.com/LazyShivam" target="_blank" rel="noopener noreferrer" style={{ 
-              color: '#79b8ff', 
+              color: '#4da6ff', 
               textDecoration: 'underline',
               fontSize: '14px'
             }}>
