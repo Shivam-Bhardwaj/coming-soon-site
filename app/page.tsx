@@ -561,17 +561,28 @@ export default function Home() {
       }
     }
     
-    // Spawn initial organisms at edges - diverse ecosystem, Game of Life start
+    // Spawn exactly 35 simple particles - blazingly fast!
+    // Some move in straight lines, some in twisted field patterns
     const initialTypes: PixelOrganism['type'][] = ['spore', 'mycelium', 'insect', 'slime', 'beetle', 'mite', 'worm', 'fly']
-    for (let i = 0; i < 80; i++) {
-      const side = Math.floor(Math.random() * 4)
-      let x = 0, y = 0
-      if (side === 0) { x = 0; y = Math.random() * canvas.height } // Left
-      else if (side === 1) { x = canvas.width; y = Math.random() * canvas.height } // Right
-      else if (side === 2) { x = Math.random() * canvas.width; y = 0 } // Top
-      else { x = Math.random() * canvas.width; y = canvas.height } // Bottom
+    for (let i = 0; i < 35; i++) {
+      const type = initialTypes[i % initialTypes.length]
+      const x = Math.random() * canvas.width
+      const y = Math.random() * canvas.height
       
-      spawnOrganism(initialTypes[Math.floor(Math.random() * initialTypes.length)], x, y)
+      spawnOrganism(type, x, y)
+      
+      // Half straight-line movers, half field-pattern movers
+      if (i < 18) {
+        // Straight line - constant velocity
+        const angle = Math.random() * Math.PI * 2
+        const speed = 0.6 + Math.random() * 1.2
+        organisms[i].vx = Math.cos(angle) * speed
+        organisms[i].vy = Math.sin(angle) * speed
+      } else {
+        // Field pattern - gentle wandering
+        organisms[i].vx = (Math.random() - 0.5) * 0.4
+        organisms[i].vy = (Math.random() - 0.5) * 0.4
+      }
     }
 
     // Get resource at location (with bounds checking and sparse lookup)
@@ -860,8 +871,8 @@ export default function Home() {
         renderBudgetRef.current = Math.min(1.5, renderBudgetRef.current * 1.05)
       }
 
-      // Clear with dark background
-      ctx.fillStyle = '#0a0a0a'
+      // Clear with pure black background
+      ctx.fillStyle = '#000000'
       ctx.fillRect(0, 0, canvas.width, canvas.height)
 
       const budget = renderBudgetRef.current
@@ -942,23 +953,20 @@ export default function Home() {
         const org = organisms[idx]
         if (!org) continue
         
-        // Movement - optimized
+        // Movement - blazingly simple and fast!
         org.age++
         org.energy -= org.type === 'apex' ? 0.22 : 0.12
         
-        const moveParams: Record<string, [number, number]> = {
-          fly: [0.8, 0.92],
-          worm: [0.12, 0.982],
-          beetle: [0.18, 0.955],
-          mite: [0.4, 0.94],
-          apex: [0.65, 0.93],
-          default: [0.22, 0.96]
+        // Straight-line particles (first 18): maintain velocity - no friction, no randomness
+        // Field particles (rest): add subtle variations for twisted field pattern
+        if (idx >= 18) {
+          // Field pattern - gentle twisting
+          org.vx += (Math.random() - 0.5) * 0.08
+          org.vy += (Math.random() - 0.5) * 0.08
+          org.vx *= 0.98
+          org.vy *= 0.98
         }
-        const [moveStrength, friction] = moveParams[org.type] || moveParams.default
-        org.vx += (Math.random() - 0.5) * moveStrength
-        org.vy += (Math.random() - 0.5) * moveStrength
-        org.vx *= friction
-        org.vy *= friction
+        // else: straight-line particles maintain constant velocity (no changes needed!)
 
         const cloudVector = getCloudVector(org.x, org.y)
         if (cloudVector) {
@@ -966,7 +974,7 @@ export default function Home() {
           org.vy += cloudVector.dy * (org.type === 'apex' ? 0.25 : 0.12)
         }
 
-        // Boundary behavior
+        // Boundary behavior - simple bounce
         if (org.x < 0 || org.x > canvas.width) org.vx *= -1
         if (org.y < 0 || org.y > canvas.height) org.vy *= -1
         org.x = Math.max(0, Math.min(canvas.width, org.x + org.vx))
@@ -1454,30 +1462,27 @@ export default function Home() {
       })
       recordPerf('renderOrganisms', performance.now() - renderOrganStart)
 
-      // Spawn new organisms - OPTIMIZED: Use cached population counts
-      if (Math.random() < 0.04 * Math.min(1, renderBudgetRef.current) && organisms.length < Math.floor(300 * renderBudgetRef.current)) {
+      // Maintain exactly 35 particles for blazing fast performance
+      if (organisms.length < 35) {
         const types: PixelOrganism['type'][] = ['spore', 'mycelium', 'insect', 'slime', 'beetle', 'mite', 'worm', 'fly']
         const type = types[Math.floor(Math.random() * types.length)]
-        const maxPop: Record<string, number> = {
-          spore: 100, mycelium: 80, insect: 60, slime: 70,
-          beetle: 40, mite: 150, worm: 50, fly: 90
-        }
-        // Use cached population from org.population
-        const sampleOrg = organisms.find(o => o.type === type)
-        if (!sampleOrg || sampleOrg.population < (maxPop[type] || 50)) {
-          spawnOrganism(type)
-        }
-      }
-      
-      // Ecosystem balance
-      if (organisms.length < Math.floor(40 * (0.6 + 0.4 * Math.min(1, renderBudgetRef.current)))) {
-        const types: PixelOrganism['type'][] = ['spore', 'mycelium', 'insect', 'slime', 'beetle', 'mite', 'worm', 'fly']
-        for (let i = 0; i < 3; i++) {
-          const type = types[Math.floor(Math.random() * types.length)]
-          const sampleOrg = organisms.find(o => o.type === type)
-          if (!sampleOrg || sampleOrg.population < 30) {
-            spawnOrganism(type)
-          }
+        const x = Math.random() * canvas.width
+        const y = Math.random() * canvas.height
+        
+        spawnOrganism(type, x, y)
+        const newIdx = organisms.length - 1
+        
+        // Maintain straight/field pattern ratio
+        if (newIdx < 18) {
+          // Straight line mover
+          const angle = Math.random() * Math.PI * 2
+          const speed = 0.6 + Math.random() * 1.2
+          organisms[newIdx].vx = Math.cos(angle) * speed
+          organisms[newIdx].vy = Math.sin(angle) * speed
+        } else {
+          // Field pattern mover
+          organisms[newIdx].vx = (Math.random() - 0.5) * 0.4
+          organisms[newIdx].vy = (Math.random() - 0.5) * 0.4
         }
       }
 
