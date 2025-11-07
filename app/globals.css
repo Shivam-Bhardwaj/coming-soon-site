@@ -19,14 +19,14 @@ body {
 }
 
 .container {
-  width: 100%;
+  width: 100vw;
   min-height: 100vh;
-  padding: 20px;
+  padding: 0;
   color: #ffb84d;
 }
 
 .terminal {
-  max-width: 100%;
+  width: 100vw;
   padding: 0;
 }
 
@@ -111,4 +111,3 @@ body {
     font-size: 13px;
   }
 }
-

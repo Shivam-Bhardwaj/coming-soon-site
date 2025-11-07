@@ -462,6 +462,11 @@ export default function Home() {
   const [biologicalColorMap, setBiologicalColorMap] = useState<Map<string, GrowthType>>(new Map());
   const backgroundCanvasRef = useRef<HTMLCanvasElement>(null);
 
+  // Refs to avoid stale state in interval-driven biology updates
+  const fungusGridRef = useRef<string[][]>([]);
+  const biologicalColoniesRef = useRef<GrowthColony[]>([]);
+  const biologicalColorMapRef = useRef<Map<string, GrowthType>>(new Map());
+
   const containerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -474,14 +479,19 @@ export default function Home() {
 
       // Start the corruption cycle after the link appears
       setTimeout(() => {
-        setShowCorruption(true)
-        setCorruptedLines([...messages])
-        // Initialize high-density biological grid (finer for better utilization)
-        const cols = Math.floor(window.innerWidth / 6); // Finer grid
-        const rows = Math.floor(window.innerHeight / 12); // Finer grid
-        setFungusGrid(Array(rows).fill(null).map(() => Array(cols).fill(' ')));
+      setShowCorruption(true)
+      setCorruptedLines([...messages])
+      // Initialize high-density biological grid (finer for better utilization)
+      const cols = Math.floor(window.innerWidth / 6); // Finer grid
+      const rows = Math.floor(window.innerHeight / 12); // Finer grid
+        const initialGrid = Array(rows).fill(null).map(() => Array(cols).fill(' '));
+        setFungusGrid(initialGrid);
+        fungusGridRef.current = initialGrid;
         setBiologicalColonies([]); // Start with no colonies - biology takes over gradually
-        setBiologicalColorMap(new Map()); // Reset color map
+        biologicalColoniesRef.current = [];
+        const initialColorMap = new Map<string, GrowthType>();
+        setBiologicalColorMap(initialColorMap); // Reset color map
+        biologicalColorMapRef.current = initialColorMap;
       }, 1200)
       
       return
@@ -546,10 +556,19 @@ export default function Home() {
         } else if (currentPhase === 'chaos') {
           // Biology starts taking over in chaos phase
           if (Math.random() < effectiveIntensity * 0.6) {
-            const result = growBiologicalColonies(fungusGrid, effectiveIntensity * 0.8, biologicalColonies, biologicalColorMap);
+            // Use refs to avoid stale closures in interval
+            const result = growBiologicalColonies(
+              fungusGridRef.current,
+              effectiveIntensity * 0.8,
+              biologicalColoniesRef.current,
+              biologicalColorMapRef.current
+            );
             setFungusGrid(result.grid);
+            fungusGridRef.current = result.grid;
             setBiologicalColonies(result.colonies);
+            biologicalColoniesRef.current = result.colonies;
             setBiologicalColorMap(result.colorMap);
+            biologicalColorMapRef.current = result.colorMap;
           }
           
           // More aggressive in showcase mode
@@ -568,10 +587,18 @@ export default function Home() {
           }).slice(-15)
         } else { // Art phase - Biology fully takes over
           // Aggressive biological takeover - always grow in art phase
-          const result = growBiologicalColonies(fungusGrid, effectiveIntensity, biologicalColonies, biologicalColorMap);
+          const result = growBiologicalColonies(
+            fungusGridRef.current,
+            effectiveIntensity,
+            biologicalColoniesRef.current,
+            biologicalColorMapRef.current
+          );
           setFungusGrid(result.grid);
+          fungusGridRef.current = result.grid;
           setBiologicalColonies(result.colonies);
+          biologicalColoniesRef.current = result.colonies;
           setBiologicalColorMap(result.colorMap);
+          biologicalColorMapRef.current = result.colorMap;
           
           // Ensure art patterns are visible in showcase
           if (Math.random() < effectiveIntensity || (isShowcase && Math.random() < 0.3)) {
@@ -613,7 +640,7 @@ export default function Home() {
 
         // In showcase mode, ensure sprites are active early
         // Also increase sprite count for better space utilization
-        const minSprites = isShowcase ? 15 : 8
+        const minSprites = isShowcase ? 25 : 12
         if (newSprites.length < minSprites && Math.random() < 0.4) {
           // Force spawn diverse sprites
           const types: SpriteType[] = ['ant', 'spider', 'plant']
@@ -709,7 +736,7 @@ export default function Home() {
 
         // Spawn new sprites based on intensity
         // Higher spawn rate for better space utilization
-        const spawnRate = isShowcase ? effectiveIntensity * 0.12 : effectiveIntensity * 0.08
+        const spawnRate = isShowcase ? effectiveIntensity * 0.2 : effectiveIntensity * 0.12
         if (Math.random() < spawnRate) {
           const newSpriteType: SpriteType = ['ant', 'spider', 'plant'][Math.floor(Math.random() * 3)] as SpriteType
           const newSprite = {
@@ -743,7 +770,7 @@ export default function Home() {
           }
         }
 
-        return newSprites.slice(-80) // Increased limit for better space utilization
+        return newSprites.slice(-120) // Increased limit for better space utilization
       })
     }, 100)
 
@@ -814,7 +841,7 @@ export default function Home() {
     
     // Initialize organisms - optimized (population set after spawn)
     const spawnOrganism = (type: PixelOrganism['type'], x?: number, y?: number) => {
-      const baseSpeed = type === 'fly' ? 1.2 : type === 'beetle' ? 0.8 : type === 'worm' ? 0.3 : 0.5
+      const baseSpeed = type === 'fly' ? 1.6 : type === 'beetle' ? 1.0 : type === 'worm' ? 0.5 : 0.8
       const resourceNeeds: Record<string, number> = {
         spore: 5, mycelium: 8, insect: 10, slime: 12,
         beetle: 15, mite: 3, worm: 7, fly: 6
@@ -846,7 +873,7 @@ export default function Home() {
     
     // Spawn initial organisms at edges - diverse ecosystem, Game of Life start
     const initialTypes: PixelOrganism['type'][] = ['spore', 'mycelium', 'insect', 'slime', 'beetle', 'mite', 'worm', 'fly']
-    for (let i = 0; i < 40; i++) {
+    for (let i = 0; i < 80; i++) {
       const side = Math.floor(Math.random() * 4)
       let x = 0, y = 0
       if (side === 0) { x = 0; y = Math.random() * canvas.height } // Left
@@ -931,7 +958,7 @@ export default function Home() {
       
       const newGrowthMap = new Map(growthMap)
       let processed = 0
-      const maxProcess = 300 // Limit pixels processed per frame
+      const maxProcess = 700 // Limit pixels processed per frame (more action)
       
       growthMap.forEach((value, key) => {
         if (processed++ > maxProcess) return
@@ -1016,7 +1043,7 @@ export default function Home() {
       updatePopulationCounts()
       
       // Spatial partitioning for organism interactions - O(n) instead of O(n²)
-      const gridSize = 50
+      const gridSize = 40
       const spatialGrid = new Map<string, number[]>() // grid key -> array of organism indices
       
       // Build spatial grid - O(n)
@@ -1042,14 +1069,14 @@ export default function Home() {
         
         // Movement - optimized
         org.age++
-        org.energy -= 0.15
+        org.energy -= 0.12
         
         const moveParams: Record<string, [number, number]> = {
-          fly: [0.3, 0.95],
-          worm: [0.05, 0.99],
-          beetle: [0.08, 0.97],
-          mite: [0.2, 0.96],
-          default: [0.1, 0.98]
+          fly: [0.5, 0.94],
+          worm: [0.08, 0.985],
+          beetle: [0.12, 0.965],
+          mite: [0.3, 0.95],
+          default: [0.15, 0.97]
         }
         const [moveStrength, friction] = moveParams[org.type] || moveParams.default
         org.vx += (Math.random() - 0.5) * moveStrength
@@ -1273,10 +1300,10 @@ export default function Home() {
         
         // Reproduction rates vary by type and conditions
         let reproductionRate = 0
-        if (org.type === 'mite') reproductionRate = canReproduce ? 0.03 : 0
-        else if (org.type === 'fly') reproductionRate = canReproduce ? 0.02 : 0
-        else if (org.type === 'beetle') reproductionRate = canReproduce && population < 20 ? 0.015 : 0
-        else reproductionRate = canReproduce ? 0.01 : 0
+        if (org.type === 'mite') reproductionRate = canReproduce ? 0.04 : 0
+        else if (org.type === 'fly') reproductionRate = canReproduce ? 0.03 : 0
+        else if (org.type === 'beetle') reproductionRate = canReproduce && population < 20 ? 0.02 : 0
+        else reproductionRate = canReproduce ? 0.015 : 0
         
         // Overpopulation penalty
         if (population > (maxPopulation[org.type] || 50) * 0.8) {
@@ -1315,7 +1342,7 @@ export default function Home() {
       // Render pixel data - OPTIMIZED: Single pass, limit iterations, batch operations
       const imageData = ctx.createImageData(canvas.width, canvas.height)
       let renderCount = 0
-      const maxRender = 2000 // Reduced limit for performance
+      const maxRender = 8000 // Higher limit to fill more of the canvas
       const time = Date.now() / 1000
       
       growthMap.forEach((value, key) => {
@@ -1395,7 +1422,7 @@ export default function Home() {
       })
 
       // Spawn new organisms - OPTIMIZED: Use cached population counts
-      if (Math.random() < 0.02 && organisms.length < 200) {
+      if (Math.random() < 0.04 && organisms.length < 300) {
         const types: PixelOrganism['type'][] = ['spore', 'mycelium', 'insect', 'slime', 'beetle', 'mite', 'worm', 'fly']
         const type = types[Math.floor(Math.random() * types.length)]
         const maxPop: Record<string, number> = {
@@ -1410,7 +1437,7 @@ export default function Home() {
       }
       
       // Ecosystem balance
-      if (organisms.length < 20) {
+      if (organisms.length < 40) {
         const types: PixelOrganism['type'][] = ['spore', 'mycelium', 'insect', 'slime', 'beetle', 'mite', 'worm', 'fly']
         for (let i = 0; i < 3; i++) {
           const type = types[Math.floor(Math.random() * types.length)]
@@ -1452,9 +1479,9 @@ export default function Home() {
             left: 0,
             width: '100vw',
             height: '100vh',
-            zIndex: 5,
+            zIndex: 0,
             pointerEvents: 'none',
-            opacity: 0.6
+            opacity: 0.65
           }}
         />
       )}
@@ -1463,48 +1490,24 @@ export default function Home() {
         position: 'relative',
         zIndex: 1
       }}>
-        {(!showCorruption ? displayedLines : corruptedLines).map((line, index) => {
-          // Color variations for corruption
-          const corruptionColors = ['#ffb84d', '#39ff14', '#00ffff', '#ff1493', '#ffff00', '#ff00ff', '#00ff00'];
-          const shouldColorCorrupt = showCorruption && phaseIntensity > 0.3;
-          
-          return (
-            <div 
-              key={index} 
-              className="line"
-              style={{
-                // All chaotic styles are applied here now
-                transform: showCorruption && Math.random() < phaseIntensity * 0.5 
-                  ? `translateX(${(Math.random() * 40 - 20) * phaseIntensity}px) rotate(${(Math.random() * 10 - 5) * phaseIntensity}deg)` 
-                  : 'none',
-                fontSize: showCorruption && phaseIntensity > 0.8 && Math.random() < phaseIntensity
-                  ? `${10 + Math.random() * 20}px` 
-                  : '14px',
-                opacity: showCorruption && phaseIntensity > 0.8 ? 0.4 + Math.random() * 0.6 : 1,
-                filter: showCorruption && phaseIntensity > 0.8 && Math.random() < phaseIntensity * 0.4 ? 'blur(1.5px)' : 'none'
-              }}
-            >
-              {shouldColorCorrupt ? (
-                <span>
-                  {line.split('').map((char, charIndex) => (
-                    <span 
-                      key={charIndex} 
-                      style={{ 
-                        color: Math.random() < phaseIntensity * 0.3 
-                          ? corruptionColors[Math.floor(Math.random() * corruptionColors.length)]
-                          : '#ffb84d'
-                      }}
-                    >
-                      {char}
-                    </span>
-                  ))}
-                </span>
-              ) : (
-                <span className="text">{line}</span>
-              )}
-            </div>
-          );
-        })}
+        {(!showCorruption ? displayedLines : corruptedLines).map((line, index) => (
+          <div 
+            key={index} 
+            className="line"
+            style={{
+              transform: showCorruption && Math.random() < phaseIntensity * 0.5 
+                ? `translateX(${(Math.random() * 40 - 20) * phaseIntensity}px) rotate(${(Math.random() * 10 - 5) * phaseIntensity}deg)` 
+                : 'none',
+              fontSize: showCorruption && phaseIntensity > 0.8 && Math.random() < phaseIntensity
+                ? `${10 + Math.random() * 20}px` 
+                : '14px',
+              opacity: showCorruption && phaseIntensity > 0.8 ? 0.5 + Math.random() * 0.5 : 1,
+              filter: showCorruption && phaseIntensity > 0.8 && Math.random() < phaseIntensity * 0.4 ? 'blur(1.2px)' : 'none'
+            }}
+          >
+            <span className="text">{line}</span>
+          </div>
+        ))}
         {isTyping && (
           <div className="line">
             <span className="text">{currentText}</span>
