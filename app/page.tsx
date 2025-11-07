@@ -12,6 +12,7 @@ import {
   getRandomAsciiArt,
 } from '../lib/sim'
 import { calculateGrowthMetrics } from '../lib/metrics'
+import { createBaseGene, mutateGene, geneToColor, type GeneSignature, type Genus } from '../lib/genetics'
 
 const messages = [
   '> coming soon is coming soon',
@@ -39,11 +40,6 @@ interface Sprite {
   age: number; // For reproduction/cannibalism
 }
 
-interface PerfSnapshot {
-  name: string;
-  avg: number;
-  max: number;
-}
 
 // Full screen art patterns - beautiful patterns
 const fullScreenPatterns = [
@@ -113,14 +109,28 @@ export default function Home() {
   const [fungusGrid, setFungusGrid] = useState<string[][]>([]);
   const [biologicalColonies, setBiologicalColonies] = useState<GrowthColony[]>([]);
   const [biologicalColorMap, setBiologicalColorMap] = useState<Map<string, GrowthType>>(new Map());
-  const [perfSnapshot, setPerfSnapshot] = useState<PerfSnapshot[]>([]);
-  const ecosystemStateRef = useRef({ clouds: 0, apex: 0, wave: '-', coverage: 0, avgIntensity: 0, entropy: 0, avgEnergy: 0, diversity: 0 })
+  const ecosystemStateRef = useRef({
+    clouds: 0,
+    apex: 0,
+    wave: '-',
+    coverage: 0,
+    avgIntensity: 0,
+    entropy: 0,
+    avgEnergy: 0,
+    diversity: 0,
+    speciesLine: '',
+    genusLine: '',
+    mutationHue: 0,
+    mutationShape: 0,
+    resourceLevel: 0
+  })
   const [ecosystemHUD, setEcosystemHUD] = useState(ecosystemStateRef.current)
   const growthMetricsRef = useRef({ coverage: 0, avgIntensity: 0, entropy: 0 })
   const organismMetricsRef = useRef({ avgEnergy: 0, diversity: 0 })
   const metricsFrameRef = useRef(0)
   const sparkChars = ['▁','▂','▃','▄','▅','▆','▇','█']
   const metricHistoryRef = useRef<{ coverage: number[]; energy: number[] }>({ coverage: [], energy: [] })
+  const mutationAccumulatorRef = useRef({ hueSum: 0, shapeSum: 0, births: 0 })
   const historyLimit = 32
 
   const pushHistoryPoint = (key: 'coverage' | 'energy', value: number) => {
@@ -159,27 +169,6 @@ export default function Home() {
     stats.max = Math.max(stats.max, duration)
     perfStatsRef.current[label] = stats
   }
-
-  useEffect(() => {
-    if (!showCorruption) {
-      setPerfSnapshot([])
-      perfStatsRef.current = {}
-      return
-    }
-    const interval = setInterval(() => {
-      const stats = perfStatsRef.current
-      const snapshot = Object.entries(stats).map(([name, value]) => ({
-        name,
-        avg: value.count ? value.total / value.count : 0,
-        max: value.max || 0,
-      }))
-      snapshot.sort((a, b) => b.avg - a.avg)
-      setPerfSnapshot(snapshot.slice(0, 6))
-      perfStatsRef.current = {}
-      setEcosystemHUD({ ...ecosystemStateRef.current })
-    }, 1000)
-    return () => clearInterval(interval)
-  }, [showCorruption])
 
   useEffect(() => {
     if (currentLineIndex >= messages.length) {
@@ -536,6 +525,8 @@ export default function Home() {
       energy: number
       population: number // Track population of this type
       territory: number // Territory size
+      genus: Genus
+      gene: GeneSignature
     }
 
     interface NutrientCloud {
@@ -571,17 +562,16 @@ export default function Home() {
     let lastApexSpawn = Date.now()
 
     // Creepy color palette
-    const colors = {
-      spore: ['#39ff14', '#00ff00', '#32cd32'], // Neon green
-      mycelium: ['#ff1493', '#ff00ff', '#ff69b4'], // Pink/magenta
-      insect: ['#ffb84d', '#ff8c00', '#ffa500'], // Orange
-      slime: ['#00ffff', '#00ced1', '#48d1cc'], // Cyan
-      beetle: ['#8b0000', '#a52a2a', '#dc143c'], // Dark red
-      mite: ['#9370db', '#ba55d3', '#da70d6'], // Purple
-      worm: ['#ff6347', '#ff4500', '#ff7f50'], // Red-orange
-      fly: ['#00ff7f', '#7fff00', '#adff2f'], // Yellow-green
-      apex: ['#ffffff', '#ffd700', '#fffae3'], // Bright predators
-      decay: ['#4b0082', '#8b008b', '#9400d3'] // Purple decay
+    const genusMap: Record<PixelOrganism['type'], Genus> = {
+      spore: 'fungi',
+      mycelium: 'fungi',
+      slime: 'ooze',
+      worm: 'annelid',
+      insect: 'arthropod',
+      beetle: 'arthropod',
+      fly: 'arthropod',
+      mite: 'arthropod',
+      apex: 'predator'
     }
 
     // Cache population counts - O(n) instead of O(n²)
@@ -596,7 +586,8 @@ export default function Home() {
     }
     
     // Initialize organisms - optimized (population set after spawn)
-    const spawnOrganism = (type: PixelOrganism['type'], x?: number, y?: number) => {
+    const spawnOrganism = (type: PixelOrganism['type'], x?: number, y?: number, inheritedGene?: GeneSignature) => {
+      const genus = genusMap[type]
       const baseSpeed = type === 'fly' ? 1.6
         : type === 'beetle' ? 1.0
         : type === 'worm' ? 0.5
@@ -606,24 +597,34 @@ export default function Home() {
         spore: 5, mycelium: 8, insect: 10, slime: 12,
         beetle: 15, mite: 3, worm: 7, fly: 6, apex: 25
       }
-      const size = type === 'beetle' ? 2 + Math.random() * 2
+      const baseSize = type === 'beetle' ? 2 + Math.random() * 2
         : type === 'mite' ? 0.5 + Math.random()
         : type === 'apex' ? 3 + Math.random() * 1.5
         : 1 + Math.random() * 2
-      
+      const mutation = inheritedGene ? mutateGene(inheritedGene) : { gene: createBaseGene(genus), hueDelta: 0, shapeDelta: 0 }
+      if (inheritedGene) {
+        mutationAccumulatorRef.current.hueSum += mutation.hueDelta
+        mutationAccumulatorRef.current.shapeSum += mutation.shapeDelta
+        mutationAccumulatorRef.current.births += 1
+      }
+      const shapeFactor = 0.7 + mutation.gene.shape * 0.6
+      const color = geneToColor(mutation.gene)
+
       organisms.push({
         x: x ?? Math.random() * canvas.width,
         y: y ?? Math.random() * canvas.height,
         vx: (Math.random() - 0.5) * baseSpeed,
         vy: (Math.random() - 0.5) * baseSpeed,
-        size,
+        size: baseSize * shapeFactor,
         type,
         age: 0,
-        color: colors[type][Math.floor(Math.random() * colors[type].length)],
+        color,
         trail: [],
         energy: type === 'apex' ? 120 + Math.random() * 80 : 50 + Math.random() * 50,
         population: 0, // Will be set by updatePopulationCounts
-        territory: resourceNeeds[type] || 5
+        territory: resourceNeeds[type] || 5,
+        genus,
+        gene: mutation.gene
       })
     }
 
@@ -1204,7 +1205,8 @@ export default function Home() {
           // Insects leave different trails
           if (org.type === 'insect') {
             org.trail.push({ x: org.x, y: org.y, opacity: 1 })
-            if (org.trail.length > 15) org.trail.shift()
+            const maxTrail = Math.max(6, Math.floor(8 + org.gene.shape * 12))
+            if (org.trail.length > maxTrail) org.trail.shift()
             org.trail.forEach((point, i) => {
               const opacity = (i / org.trail.length) * 0.5
               growPixel(point.x, point.y, opacity, org.color, org)
@@ -1214,7 +1216,8 @@ export default function Home() {
           // Flies leave erratic trails
           if (org.type === 'fly') {
             org.trail.push({ x: org.x, y: org.y, opacity: 1 })
-            if (org.trail.length > 8) org.trail.shift()
+            const maxTrail = Math.max(4, Math.floor(5 + org.gene.shape * 10))
+            if (org.trail.length > maxTrail) org.trail.shift()
             org.trail.forEach((point, i) => {
               const opacity = (i / org.trail.length) * 0.4
               growPixel(point.x, point.y, opacity, org.color, org)
@@ -1297,7 +1300,7 @@ export default function Home() {
         }
         
         if (Math.random() < reproductionRate) {
-          spawnOrganism(org.type, org.x + (Math.random() - 0.5) * 50, org.y + (Math.random() - 0.5) * 50)
+          spawnOrganism(org.type, org.x + (Math.random() - 0.5) * 50, org.y + (Math.random() - 0.5) * 50, org.gene)
           org.energy -= 40
           setResource(org.x, org.y, localResource - 20)
         }
@@ -1337,6 +1340,7 @@ export default function Home() {
         diversity,
       }
       ecosystemStateRef.current = {
+        ...ecosystemStateRef.current,
         clouds: nutrientClouds.length,
         apex: apexCount,
         wave: decayWave ? `${decayWave.axis}:${Math.round(decayWave.position)}` : '-',
@@ -1346,9 +1350,6 @@ export default function Home() {
         avgEnergy: organismMetricsRef.current.avgEnergy,
         diversity: organismMetricsRef.current.diversity,
       }
-      pushHistoryPoint('coverage', ecosystemStateRef.current.coverage)
-      pushHistoryPoint('energy', Math.min(1, ecosystemStateRef.current.avgEnergy / 180))
-
       // Spread growth organically
       const spreadStart = performance.now()
       spreadGrowth()
@@ -1388,6 +1389,57 @@ export default function Home() {
         if (growthMetricsRef.current.coverage < 0.4) {
           ensureAmbientGrowth(Math.max(30000, Math.floor(growthMapCapRef.current * 1.1)))
         }
+
+        let resourceSum = 0
+        let resourceSamples = 0
+        const resourceLimit = 800
+        resourceMap.forEach((value) => {
+          if (resourceSamples >= resourceLimit) return
+          resourceSum += value
+          resourceSamples++
+        })
+        const resourceLevel = resourceSamples ? resourceSum / resourceSamples : 0
+
+        const speciesCounts: Partial<Record<PixelOrganism['type'], number>> = {}
+        const genusCounts: Partial<Record<Genus, number>> = {}
+        organisms.forEach((org) => {
+          speciesCounts[org.type] = (speciesCounts[org.type] || 0) + 1
+          genusCounts[org.genus] = (genusCounts[org.genus] || 0) + 1
+        })
+        const speciesOrder: PixelOrganism['type'][] = ['spore','mycelium','slime','worm','insect','beetle','mite','fly','apex']
+        const genusOrder: Genus[] = ['fungi','arthropod','ooze','annelid','predator']
+        const speciesLine = speciesOrder.map(type => `${type.slice(0,2)}:${speciesCounts[type] || 0}`).join(' ')
+        const genusLine = genusOrder.map(genus => `${genus[0].toUpperCase()}:${genusCounts[genus] || 0}`).join(' ')
+
+        const births = Math.max(1, mutationAccumulatorRef.current.births)
+        const mutationHue = mutationAccumulatorRef.current.hueSum / births
+        const mutationShape = mutationAccumulatorRef.current.shapeSum / births
+        mutationAccumulatorRef.current.hueSum *= 0.4
+        mutationAccumulatorRef.current.shapeSum *= 0.4
+        mutationAccumulatorRef.current.births = Math.max(1, mutationAccumulatorRef.current.births * 0.4)
+
+        const resourcePercent = Math.max(0, Math.min(100, (resourceLevel / 120) * 100))
+
+        ecosystemStateRef.current = {
+          clouds: nutrientClouds.length,
+          apex: speciesCounts['apex'] || 0,
+          wave: decayWave ? `${decayWave.axis}:${Math.round(decayWave.position)}` : '-',
+          coverage: growthMetricsRef.current.coverage,
+          avgIntensity: growthMetricsRef.current.avgIntensity,
+          entropy: growthMetricsRef.current.entropy,
+          avgEnergy: organismMetricsRef.current.avgEnergy,
+          diversity: organismMetricsRef.current.diversity,
+          speciesLine,
+          genusLine,
+          mutationHue,
+          mutationShape,
+          resourceLevel: resourcePercent
+        }
+
+        pushHistoryPoint('coverage', ecosystemStateRef.current.coverage)
+        pushHistoryPoint('energy', Math.min(1, ecosystemStateRef.current.avgEnergy / 200))
+        ecosystemStateRef.current = { ...ecosystemStateRef.current }
+        setEcosystemHUD(ecosystemStateRef.current)
       }
 
       // Render pixel data - OPTIMIZED: Single pass, limit iterations, batch operations
@@ -1586,19 +1638,25 @@ export default function Home() {
         )}
       </div>
 
-      {showCorruption && perfSnapshot.length > 0 && (
+      {showCorruption && (
         <div className="performance-overlay">
-          <div className="perf-row">
-            budget {renderBudgetRef.current.toFixed(2)} | frame {frameTimeAvgRef.current.toFixed(1)}ms | spread {spreadThrottleRef.current.toFixed(2)} | cap {(growthMapCapRef.current / 1000).toFixed(1)}k
-          </div>
           <div className="perf-row">
             clouds {ecosystemHUD.clouds} | apex {ecosystemHUD.apex} | wave {ecosystemHUD.wave}
           </div>
           <div className="perf-row">
-            cover {(ecosystemHUD.coverage * 100).toFixed(1)}% | avgI {ecosystemHUD.avgIntensity.toFixed(0)} | entropy {ecosystemHUD.entropy.toFixed(2)}
+            cover {(ecosystemHUD.coverage * 100).toFixed(1)}% | entropy {ecosystemHUD.entropy.toFixed(2)} | resources {ecosystemHUD.resourceLevel.toFixed(0)}%
           </div>
           <div className="perf-row">
             energy {ecosystemHUD.avgEnergy.toFixed(1)} | diversity {ecosystemHUD.diversity}
+          </div>
+          <div className="perf-row">
+            species {ecosystemHUD.speciesLine || '...'}
+          </div>
+          <div className="perf-row">
+            genus {ecosystemHUD.genusLine || '...'}
+          </div>
+          <div className="perf-row">
+            mutations Δh {ecosystemHUD.mutationHue.toFixed(1)}° | Δshape {ecosystemHUD.mutationShape.toFixed(2)}
           </div>
           <div className="perf-row">
             cov {getSparkline('coverage')}
@@ -1606,11 +1664,6 @@ export default function Home() {
           <div className="perf-row">
             eng {getSparkline('energy')}
           </div>
-          {perfSnapshot.map(({ name, avg, max }) => (
-            <div className="perf-row" key={name}>
-              {name}: {avg.toFixed(1)}ms (max {max.toFixed(1)}ms)
-            </div>
-          ))}
         </div>
       )}
     </main>
