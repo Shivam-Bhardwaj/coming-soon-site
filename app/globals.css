@@ -7,15 +7,13 @@
 html,
 body {
   height: 100%;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
+  font-family: 'Courier New', Courier, monospace;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
 body {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: #0078d4;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -27,188 +25,61 @@ body {
   width: 100%;
   height: 100vh;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  position: relative;
+  color: #ffffff;
 }
 
-.content {
-  text-align: center;
-  color: white;
-  z-index: 1;
-  padding: 2rem;
-  animation: fadeIn 1s ease-in;
-}
-
-.title {
-  font-size: 4rem;
-  font-weight: 700;
-  margin-bottom: 0.5rem;
-  background: linear-gradient(45deg, #fff, #f0f0f0);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  animation: slideInDown 0.8s ease-out;
-}
-
-.subtitle {
-  font-size: 2.5rem;
-  font-weight: 300;
-  margin-bottom: 2rem;
-  opacity: 0.9;
-  animation: slideInUp 0.8s ease-out 0.2s both;
-}
-
-.description {
-  font-size: 1.25rem;
-  line-height: 1.8;
-  opacity: 0.85;
-  margin-bottom: 3rem;
-  max-width: 600px;
-  margin-left: auto;
-  margin-right: auto;
-  animation: fadeIn 1s ease-in 0.4s both;
-}
-
-.loader {
+.line {
+  font-size: 24px;
+  font-weight: normal;
+  line-height: 1.5;
   display: flex;
-  justify-content: center;
-  gap: 0.5rem;
-  margin-top: 2rem;
+  align-items: center;
 }
 
-.dot {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: white;
-  animation: bounce 1.4s infinite ease-in-out both;
+.text {
+  color: #ffffff;
 }
 
-.dot:nth-child(1) {
-  animation-delay: -0.32s;
+.cursor {
+  color: #ffffff;
+  animation: blink 1s infinite;
+  margin-left: 2px;
 }
 
-.dot:nth-child(2) {
-  animation-delay: -0.16s;
-}
-
-.dot:nth-child(3) {
-  animation-delay: 0;
-}
-
-@keyframes fadeIn {
-  from {
+@keyframes blink {
+  0%, 49% {
+    opacity: 1;
+  }
+  50%, 100% {
     opacity: 0;
   }
-  to {
-    opacity: 1;
-  }
 }
 
-@keyframes slideInDown {
-  from {
-    opacity: 0;
-    transform: translateY(-30px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+.link {
+  margin-top: 40px;
+  font-size: 14px;
 }
 
-@keyframes slideInUp {
-  from {
-    opacity: 0;
-    transform: translateY(30px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+.link a {
+  color: #ffffff;
+  text-decoration: underline;
 }
 
-@keyframes bounce {
-  0%, 80%, 100% {
-    transform: scale(0);
-    opacity: 0.5;
-  }
-  40% {
-    transform: scale(1);
-    opacity: 1;
-  }
+.link a:hover {
+  opacity: 0.8;
 }
 
-/* Background animation */
-.container::before {
-  content: '';
-  position: absolute;
-  top: -50%;
-  left: -50%;
-  width: 200%;
-  height: 200%;
-  background: radial-gradient(circle, rgba(255, 255, 255, 0.1) 1px, transparent 1px);
-  background-size: 50px 50px;
-  animation: moveBackground 20s linear infinite;
-  z-index: 0;
-}
-
-@keyframes moveBackground {
-  0% {
-    transform: translate(0, 0);
-  }
-  100% {
-    transform: translate(50px, 50px);
-  }
-}
-
-.social-link {
-  margin-top: 3rem;
-  animation: fadeIn 1s ease-in 0.6s both;
-}
-
-.x-link {
-  display: inline-block;
-  color: white;
-  text-decoration: none;
-  font-size: 1.1rem;
-  padding: 0.75rem 2rem;
-  border: 2px solid rgba(255, 255, 255, 0.3);
-  border-radius: 50px;
-  transition: all 0.3s ease;
-  backdrop-filter: blur(10px);
-  background: rgba(255, 255, 255, 0.1);
-}
-
-.x-link:hover {
-  background: rgba(255, 255, 255, 0.2);
-  border-color: rgba(255, 255, 255, 0.5);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-}
-
-.x-link:active {
-  transform: translateY(0);
-}
-
-/* Responsive design */
 @media (max-width: 768px) {
-  .title {
-    font-size: 2.5rem;
+  .line {
+    font-size: 18px;
+    padding: 0 20px;
   }
   
-  .subtitle {
-    font-size: 1.75rem;
-  }
-  
-  .description {
-    font-size: 1rem;
-    padding: 0 1rem;
-  }
-  
-  .x-link {
-    font-size: 0.95rem;
-    padding: 0.6rem 1.5rem;
+  .link {
+    font-size: 12px;
   }
 }
 
