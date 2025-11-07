@@ -8,21 +8,22 @@ const messages = [
   '> status: slightly better than 404',
 ]
 
-// Word alternatives - SFW meaningful replacements
-const wordAlternatives: Record<string, string[]> = {
-  'coming': ['arriving', 'approaching', 'reaching', 'nearby'],
-  'soon': ['shortly', 'quickly', 'fast', 'rapidly'],
-  'is': ['becomes', 'turns', 'seems', 'appears'],
-  'what': ['which', 'that', 'this', 'where'],
-  'time': ['moment', 'instant', 'period', 'duration'],
-  'anyway': ['regardless', 'however', 'still', 'yet'],
-  'will': ['shall', 'might', 'could', 'may'],
-  'come': ['arrive', 'reach', 'appear', 'emerge'],
-  'before': ['prior', 'earlier', 'ahead', 'preceding'],
-  'status': ['state', 'condition', 'situation', 'mode'],
-  'slightly': ['somewhat', 'rather', 'fairly', 'quite'],
-  'better': ['improved', 'superior', 'enhanced', 'upgraded'],
-  'than': ['compared', 'versus', 'against', 'over'],
+// Complete words from other languages - for realistic corruption
+// These are complete words that might randomly appear, like real data corruption
+const foreignWords = {
+  spanish: ['viene', 'pronto', 'tiempo', 'antes', 'estado', 'mejor', 'que', 'esta', 'llegar', 'cual', 'momento', 'todavia', 'puede', 'llegara', 'mejor', 'que', 'ligeramente'],
+  french: ['vient', 'bientot', 'temps', 'avant', 'etat', 'mieux', 'que', 'est', 'arriver', 'quel', 'moment', 'encore', 'peut', 'arrivera', 'legerement'],
+  german: ['kommt', 'bald', 'zeit', 'vor', 'status', 'besser', 'als', 'ist', 'kommen', 'was', 'moment', 'noch', 'wird', 'kommt', 'etwas'],
+  italian: ['viene', 'presto', 'tempo', 'prima', 'stato', 'meglio', 'di', 'e', 'arrivare', 'cosa', 'momento', 'ancora', 'verra', 'leggermente'],
+  portuguese: ['vem', 'logo', 'tempo', 'antes', 'estado', 'melhor', 'que', 'esta', 'chegar', 'qual', 'momento', 'ainda', 'vai', 'chegara', 'ligeiramente'],
+}
+
+// Get a random complete word from foreign languages
+function getRandomForeignWord(): string {
+  const languages = Object.keys(foreignWords) as (keyof typeof foreignWords)[]
+  const randomLang = languages[Math.floor(Math.random() * languages.length)]
+  const words = foreignWords[randomLang]
+  return words[Math.floor(Math.random() * words.length)]
 }
 
 // Corruption variants - mix of languages and gibberish
@@ -41,32 +42,34 @@ function getRandomChar(type: keyof typeof corruptionChars): string {
 }
 
 function corruptWord(word: string): string {
-  const lowerWord = word.toLowerCase().replace(/[>.,!?]/g, '')
+  const cleanWord = word.replace(/[>.,!?]/g, '')
   
-  // 30% chance to keep word correct or use meaningful alternative
+  // 30% chance to keep complete word (correct OR foreign word)
   if (Math.random() < 0.3) {
-    if (wordAlternatives[lowerWord] && Math.random() < 0.5) {
-      const alternatives = wordAlternatives[lowerWord]
-      const replacement = alternatives[Math.floor(Math.random() * alternatives.length)]
-      // Preserve original case and punctuation
+    // 50% chance to keep original, 50% to use foreign word
+    if (Math.random() < 0.5) {
+      return word // Keep original word
+    } else {
+      // Replace with complete foreign word (realistic corruption)
+      const foreignWord = getRandomForeignWord()
+      // Preserve original case
       if (word[0] === word[0].toUpperCase()) {
-        return replacement.charAt(0).toUpperCase() + replacement.slice(1)
+        return foreignWord.charAt(0).toUpperCase() + foreignWord.slice(1)
       }
-      return replacement
+      return foreignWord
     }
-    return word // Keep original word
   }
   
-  // 70% chance to corrupt
+  // 70% chance to corrupt with mixed characters
   const types: (keyof typeof corruptionChars)[] = ['english', 'cyrillic', 'arabic', 'japanese', 'symbols', 'gibberish']
   const randomType = types[Math.floor(Math.random() * types.length)]
   
-  // Corrupt 30-50% of characters
+  // Corrupt 40-60% of characters
   return word
     .split('')
     .map((char) => {
       if (char === ' ' || char === '>' || char === '.' || char === ',' || char === '!' || char === '?') return char
-      if (Math.random() < 0.4) {
+      if (Math.random() < 0.5) {
         return getRandomChar(randomType)
       }
       return char
