@@ -46,7 +46,7 @@ const asciiArtPatterns = [
   '◆◇◆◇', '★☆★☆', '♪♫♪♫',
 ]
 
-// Full screen art patterns
+// Full screen art patterns - beautiful patterns
 const fullScreenPatterns = [
   `
     ╔════════╗
@@ -68,11 +68,121 @@ const fullScreenPatterns = [
     ◥◤◥◤◥◤
   `,
   `
-    ┌─┐
-    │♥│
-    └─┘
+    ╱◥◣◢◤╲
+    ◥◣╱╲◢◤
+    ◢◤╲╱◥◣
+    ╲◢◤◥◣╱
+  `,
+  `
+    ░░▒▒▓▓██▓▓▒▒░░
+    ░▒▓█████████▓▒░
+    ▒▓███████████▓▒
+    ▓█████████████▓
+    ▒▓███████████▓▒
+    ░▒▓█████████▓▒░
+    ░░▒▒▓▓██▓▓▒▒░░
+  `,
+  `
+    ⋆｡‧˚ʚ♡ɞ˚‧｡⋆
+    ✧･ﾟ: *✧･ﾟ:*
+    ˚ ༘♡ ⋆｡˚ ❀
+  `,
+  `
+    ╭──────╮
+    │ ◯ ◯ │
+    │  ▽  │
+    ╰──────╯
+  `,
+  `
+    ∴∵∴∵∴∵∴
+    ∵∴∵∴∵∴∵
+    ∴∵∴∵∴∵∴
   `,
 ]
+
+// Beautiful geometric patterns
+const geometricPatterns = [
+  '◆◇◆◇◆◇◆◇',
+  '▲▼▲▼▲▼▲▼',
+  '■□■□■□■□',
+  '●○●○●○●○',
+  '★☆★☆★☆★☆',
+  '▪▫▪▫▪▫▪▫',
+  '◢◣◥◤◢◣◥◤',
+  '╱╲╱╲╱╲╱╲',
+]
+
+function generateBeautifulPattern(): string[] {
+  const patterns = [
+    // Yin-Yang pattern
+    () => [
+      '      ⣾⣿⣷      ',
+      '    ⣾⣿⣿⣿⣷    ',
+      '   ⣾⣿⣿⣿⣿⣿⣷   ',
+      '  ⣾⣿⣿⣿⣿⣿⣿⣷  ',
+      '  ⢿⣿⣿⣿⣿⣿⣿⡿  ',
+      '   ⢿⣿⣿⣿⣿⡿   ',
+      '    ⢿⣿⣿⡿    ',
+      '      ⢿⡿      ',
+    ],
+    // Diamond pattern
+    () => [
+      '       ◆       ',
+      '      ◆◆◆      ',
+      '     ◆◆◆◆◆     ',
+      '    ◆◆◆◆◆◆◆    ',
+      '   ◆◆◆◆◆◆◆◆◆   ',
+      '    ◆◆◆◆◆◆◆    ',
+      '     ◆◆◆◆◆     ',
+      '      ◆◆◆      ',
+      '       ◆       ',
+    ],
+    // Wave pattern with gradient
+    () => [
+      '░░▒▒▓▓████▓▓▒▒░░',
+      '▒▒▓▓████████▓▓▒▒',
+      '▓▓████████████▓▓',
+      '████████████████',
+      '▓▓████████████▓▓',
+      '▒▒▓▓████████▓▓▒▒',
+      '░░▒▒▓▓████▓▓▒▒░░',
+    ],
+    // Mandala pattern
+    () => [
+      '    ✦･ﾟ✧*:･ﾟ✧    ',
+      '  ✧･ﾟ: *✧･ﾟ:*  ',
+      ' *:･ﾟ✧*:･ﾟ✧* ',
+      '✧･ﾟ: ORDER :･ﾟ✧',
+      '✧･ﾟ: CHAOS :･ﾟ✧',
+      ' *:･ﾟ✧*:･ﾟ✧* ',
+      '  ✧･ﾟ: *✧･ﾟ:*  ',
+      '    ✦･ﾟ✧*:･ﾟ✧    ',
+    ],
+    // ASCII Art explosion
+    () => [
+      '     ╱|╲     ',
+      '    ╱ | ╲    ',
+      '   ╱  |  ╲   ',
+      '  ╱   |   ╲  ',
+      ' ╱    |    ╲ ',
+      '━━━━━━━━━━━━━',
+      ' ╲    |    ╱ ',
+      '  ╲   |   ╱  ',
+      '   ╲  |  ╱   ',
+      '    ╲ | ╱    ',
+      '     ╲|╱     ',
+    ],
+    // Matrix rain
+    () => Array(10).fill(0).map(() => 
+      Array(20).fill(0).map(() => 
+        Math.random() < 0.4 ? ['0','1','░','▒','▓','█'][Math.floor(Math.random() * 6)] : ' '
+      ).join('')
+    ),
+  ]
+  
+  const selectedPattern = patterns[Math.floor(Math.random() * patterns.length)]
+  return selectedPattern()
+}
 
 function getRandomExtendedChar(): string {
   const allChars = Object.values(extendedASCII).join('')
@@ -216,19 +326,28 @@ export default function Home() {
         setCorruptedLines([...displayedLines])
       }, 1000)
       
-      // Switch to chaos phase after 5 seconds
-      setTimeout(() => {
-        setCorruptionPhase('chaos')
-        setCorruptionSpeed(100) // Speed up
-      }, 5000)
+      // Create a cyclic yin-yang effect - chaos and order
+      let phase = 0
+      const cyclePhases = () => {
+        const phases = [
+          { type: 'controlled', speed: 200 },  // Order
+          { type: 'chaos', speed: 100 },       // Chaos
+          { type: 'art', speed: 50 },          // Beautiful chaos
+          { type: 'controlled', speed: 150 },  // Back to order
+        ]
+        
+        phase = (phase + 1) % phases.length
+        setCorruptionPhase(phases[phase].type as any)
+        setCorruptionSpeed(phases[phase].speed)
+      }
       
-      // Switch to art phase after 10 seconds
-      setTimeout(() => {
-        setCorruptionPhase('art')
-        setCorruptionSpeed(50) // Maximum speed
-      }, 10000)
+      // Switch phases every 3 seconds for a continuous cycle
+      const phaseInterval = setInterval(cyclePhases, 3000)
       
-      return
+      // Start with first phase change after 2 seconds
+      setTimeout(cyclePhases, 2000)
+      
+      return () => clearInterval(phaseInterval)
     }
 
     const currentMessage = messages[currentLineIndex]
@@ -288,28 +407,34 @@ export default function Home() {
             return line
           }).slice(-15) // Keep only last 15 lines to prevent overflow
         } else {
-          // Art phase - generate full screen patterns
+          // Art phase - generate beautiful patterns
           const intensity = 1
           
-          // Generate background art
-          if (Math.random() < 0.8) {
-            const art = generateRandomArt(20, 3)
-            setBackgroundArt(art)
+          // Generate beautiful background patterns
+          if (Math.random() < 0.7) {
+            const beautifulArt = generateBeautifulPattern()
+            setBackgroundArt(beautifulArt)
           }
           
           // Add full screen patterns
-          if (Math.random() < 0.5) {
+          if (Math.random() < 0.4) {
             const pattern = fullScreenPatterns[Math.floor(Math.random() * fullScreenPatterns.length)]
             prev.push(...pattern.split('\n').filter(l => l.trim()))
           }
           
+          // Add geometric patterns
+          if (Math.random() < 0.3) {
+            const geoPattern = geometricPatterns[Math.floor(Math.random() * geometricPatterns.length)]
+            prev.push(geoPattern)
+          }
+          
           // Maximum chaos on existing lines
           return prev.map((line) => {
-            if (Math.random() < 0.9) {
+            if (Math.random() < 0.8) {
               return chaosCorruption(line, intensity, isLastLineXLink(line))
             }
             return line
-          }).slice(-20) // Keep more lines in art phase
+          }).slice(-25) // Keep more lines in art phase
         }
       })
     }, corruptionSpeed)
@@ -353,41 +478,60 @@ export default function Home() {
         position: 'relative',
         zIndex: 1
       }}>
-        {(showCorruption ? corruptedLines : displayedLines).map((line, index) => {
-          const isXLink = line.includes('x.com/LazyShivam')
+        {(showCorruption ? corruptedLines : displayedLines).filter(line => !line.includes('x.com/LazyShivam')).map((line, index) => {
           return (
             <div 
               key={index} 
               className="line" 
               style={{
-                transform: corruptionPhase !== 'controlled' && !isXLink && Math.random() < 0.2 
-                  ? `translateX(${Math.random() * 20 - 10}px) rotate(${Math.random() * 4 - 2}deg)` 
+                transform: corruptionPhase !== 'controlled' && Math.random() < 0.4 
+                  ? `translateX(${Math.random() * 40 - 20}px) rotate(${Math.random() * 10 - 5}deg) scaleX(${0.8 + Math.random() * 0.4})` 
                   : 'none',
-                fontSize: corruptionPhase === 'art' && !isXLink && Math.random() < 0.3 
-                  ? `${14 + Math.random() * 10}px` 
+                fontSize: corruptionPhase === 'art' && Math.random() < 0.5 
+                  ? `${10 + Math.random() * 20}px` 
                   : '14px',
-                opacity: isXLink ? 1 : (corruptionPhase === 'art' ? 0.7 + Math.random() * 0.3 : 1)
+                opacity: corruptionPhase === 'art' ? 0.4 + Math.random() * 0.6 : 1,
+                filter: corruptionPhase === 'art' && Math.random() < 0.3 ? 'blur(1px)' : 'none'
               }}
             >
-              <span className="text" style={{
-                textDecoration: isXLink ? 'underline' : 'none',
-                cursor: isXLink ? 'pointer' : 'default'
-              }}>
-                {isXLink ? (
-                  <a href="https://x.com/LazyShivam" target="_blank" rel="noopener noreferrer" style={{ color: 'inherit', textDecoration: 'underline' }}>
-                    {line}
-                  </a>
-                ) : line}
-              </span>
+              <span className="text">{line}</span>
             </div>
           )
         })}
-        {isTyping && (
+        {isTyping && !currentText.includes('x.com/LazyShivam') && (
           <div className="line">
             <span className="text">{currentText}</span>
             <span className="cursor">_</span>
           </div>
         )}
+        
+        {/* Permanent X link - always visible, always blue, never corrupted */}
+        <div className="line" style={{
+          position: showCorruption ? 'fixed' : 'relative',
+          bottom: showCorruption ? '40px' : 'auto',
+          left: showCorruption ? '20px' : 'auto',
+          zIndex: 1000,
+          backgroundColor: showCorruption ? 'rgba(10, 10, 10, 0.9)' : 'transparent',
+          padding: showCorruption ? '10px 20px' : '0',
+          borderRadius: showCorruption ? '5px' : '0',
+          border: showCorruption ? '1px solid #79b8ff' : 'none'
+        }}>
+          <a href="https://x.com/LazyShivam" target="_blank" rel="noopener noreferrer" style={{ 
+            color: '#79b8ff', 
+            textDecoration: 'underline',
+            fontSize: '14px',
+            fontWeight: showCorruption ? 'bold' : 'normal'
+          }}>
+            {isTyping && currentText.includes('x.com/LazyShivam') ? (
+              <>
+                {currentText}
+                <span className="cursor" style={{ color: '#79b8ff' }}>_</span>
+              </>
+            ) : (
+              '> ask him -> x.com/LazyShivam'
+            )}
+          </a>
+        </div>
       </div>
     </main>
   )
