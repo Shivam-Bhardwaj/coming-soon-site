@@ -39,11 +39,7 @@ const antSprites = ['_@_v', '_@_>', '<_@_'];
 const spiderSprites = ['/\\oo/\\', 'oo'];
 const plantSprites = ['{*}','[*]','{*}'];
 
-const fungusPatterns = {
-  spores: ['.', '·', '•'],
-  growth: ['░', '▒', '▓', '█'],
-  tendrils: ['/', '\\', '-', '|']
-};
+// Fungus now uses only dots - defined in growFungus function
 
 // Sprite types with behaviors
 type SpriteType = 'ant' | 'spider' | 'plant';
@@ -207,32 +203,59 @@ function generateBeautifulPattern(): string[] {
   return selectedPattern()
 }
 
-// --- NEW: Fungus Growth Algorithm ---
+// --- NEW: Aggressive Fungal Colony Growth Algorithm ---
 function growFungus(grid: string[][], intensity: number): string[][] {
   const newGrid = grid.map(row => [...row]);
   const rows = newGrid.length;
   const cols = newGrid[0].length;
-
-  for (let i = 0; i < Math.floor(intensity * 5); i++) { // Spread more as intensity increases
-    const r = Math.floor(Math.random() * rows);
-    const c = Math.floor(Math.random() * cols);
-
-    if (newGrid[r][c] !== ' ') { // If it's already grown
-      // Spread to neighbors
-      const neighbors = [[r-1, c], [r+1, c], [r, c-1], [r, c+1]];
-      for (const [nr, nc] of neighbors) {
-        if (nr >= 0 && nr < rows && nc >= 0 && nc < cols && Math.random() < 0.3 * intensity) {
-          if (newGrid[nr][nc] === ' ') {
-            newGrid[nr][nc] = fungusPatterns.spores[Math.floor(Math.random() * fungusPatterns.spores.length)];
-          } else if (Math.random() < 0.1 * intensity) {
-            newGrid[nr][nc] = fungusPatterns.growth[Math.floor(Math.random() * fungusPatterns.growth.length)];
-          }
-        }
+  
+  // Simple dots for fungus: ., ·, •
+  const dots = ['.', '·', '•'];
+  
+  // Find all existing fungus cells
+  const fungusCells: [number, number][] = [];
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      if (newGrid[r][c] !== ' ') {
+        fungusCells.push([r, c]);
       }
-    } else if (Math.random() < 0.05 * intensity) { // New spore
-      newGrid[r][c] = fungusPatterns.spores[0];
     }
   }
+  
+  // If no fungus exists, create seed points (multiple starting colonies)
+  if (fungusCells.length === 0) {
+    const seedCount = Math.floor(intensity * 5) + 3; // At least 3 seeds
+    for (let i = 0; i < seedCount; i++) {
+      const r = Math.floor(Math.random() * rows);
+      const c = Math.floor(Math.random() * cols);
+      newGrid[r][c] = dots[0];
+      fungusCells.push([r, c]);
+    }
+  }
+  
+  // Aggressive spreading from all existing fungus cells
+  const spreadRate = Math.max(0.4, intensity * 0.8); // Much more aggressive
+  fungusCells.forEach(([r, c]) => {
+    // Check all 8 neighbors (including diagonals for organic spread)
+    const neighbors = [
+      [r-1, c-1], [r-1, c], [r-1, c+1],
+      [r, c-1],             [r, c+1],
+      [r+1, c-1], [r+1, c], [r+1, c+1]
+    ];
+    
+    neighbors.forEach(([nr, nc]) => {
+      if (nr >= 0 && nr < rows && nc >= 0 && nc < cols) {
+        if (newGrid[nr][nc] === ' ' && Math.random() < spreadRate) {
+          // Spread to empty cell
+          newGrid[nr][nc] = dots[Math.floor(Math.random() * dots.length)];
+        } else if (newGrid[nr][nc] !== ' ' && Math.random() < spreadRate * 0.3) {
+          // Densify existing fungus
+          newGrid[nr][nc] = dots[Math.min(2, dots.indexOf(newGrid[nr][nc]) + 1) || 0];
+        }
+      }
+    });
+  });
+  
   return newGrid;
 }
 
@@ -451,6 +474,11 @@ export default function Home() {
             return line
           })
         } else if (currentPhase === 'chaos') {
+          // Fungus also grows in chaos phase for better space utilization
+          if (Math.random() < effectiveIntensity * 0.5) {
+            setFungusGrid(grid => growFungus(grid, effectiveIntensity * 0.7))
+          }
+          
           // More aggressive in showcase mode
           const spawnRate = isShowcase ? effectiveIntensity * 0.3 : effectiveIntensity * 0.2
           if (Math.random() < spawnRate) {
@@ -466,10 +494,10 @@ export default function Home() {
             return line
           }).slice(-15)
         } else { // Art phase
+          // Aggressive fungus growth - always grow in art phase
+          setFungusGrid(grid => growFungus(grid, effectiveIntensity))
+          
           // Ensure art patterns are visible in showcase
-          if (Math.random() < effectiveIntensity || (isShowcase && Math.random() < 0.3)) {
-            setFungusGrid(grid => growFungus(grid, effectiveIntensity))
-          }
           if (Math.random() < effectiveIntensity || (isShowcase && Math.random() < 0.3)) {
             setBackgroundArt(generateBeautifulPattern())
           }
@@ -508,8 +536,10 @@ export default function Home() {
         const effectiveIntensity = isShowcase ? Math.min(1, intensity * 1.2) : intensity
 
         // In showcase mode, ensure sprites are active early
-        if (isShowcase && newSprites.length < 10 && Math.random() < 0.3) {
-          // Force spawn diverse sprites in showcase
+        // Also increase sprite count for better space utilization
+        const minSprites = isShowcase ? 15 : 8
+        if (newSprites.length < minSprites && Math.random() < 0.4) {
+          // Force spawn diverse sprites
           const types: SpriteType[] = ['ant', 'spider', 'plant']
           const spawnType = types[Math.floor(Math.random() * types.length)]
           newSprites.push({
@@ -602,8 +632,8 @@ export default function Home() {
         })
 
         // Spawn new sprites based on intensity
-        // Higher spawn rate in showcase mode
-        const spawnRate = isShowcase ? effectiveIntensity * 0.08 : effectiveIntensity * 0.05
+        // Higher spawn rate for better space utilization
+        const spawnRate = isShowcase ? effectiveIntensity * 0.12 : effectiveIntensity * 0.08
         if (Math.random() < spawnRate) {
           const newSpriteType: SpriteType = ['ant', 'spider', 'plant'][Math.floor(Math.random() * 3)] as SpriteType
           const newSprite = {
@@ -637,7 +667,7 @@ export default function Home() {
           }
         }
 
-        return newSprites.slice(-50) // Limit to 50 sprites for performance
+        return newSprites.slice(-80) // Increased limit for better space utilization
       })
     }, 100)
 
