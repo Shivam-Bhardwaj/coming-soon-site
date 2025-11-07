@@ -112,6 +112,11 @@ export default function Home() {
   const [fungusGrid, setFungusGrid] = useState<string[][]>([]);
   const [biologicalColonies, setBiologicalColonies] = useState<GrowthColony[]>([]);
   const [biologicalColorMap, setBiologicalColorMap] = useState<Map<string, GrowthType>>(new Map());
+  const [animationPhase, setAnimationPhase] = useState<'chaos' | 'antimony' | 'sb' | 'white' | 'circle' | 'explosion'>('chaos')
+  const [antimonyText, setAntimonyText] = useState('antimony')
+  const [circleRadius, setCircleRadius] = useState(0)
+  const [explosionLines, setExplosionLines] = useState<Array<{x: number, y: number, angle: number, color: string, progress: number}>>([])
+  const explosionCanvasRef = useRef<HTMLCanvasElement>(null)
   const ecosystemStateRef = useRef({
     clouds: 0,
     apex: 0,
@@ -165,6 +170,10 @@ export default function Home() {
       terminalSuppressedRef.current = false
       corruptionDecayRef.current = { started: false, startTime: 0 }
       setLinkLabel(X_LINK_LABEL_FULL)
+      setAnimationPhase('chaos')
+      setAntimonyText('antimony')
+      setCircleRadius(0)
+      setExplosionLines([])
     }
   }, [showCorruption])
 
@@ -195,6 +204,7 @@ export default function Home() {
       // Start the corruption cycle after the link appears
       setTimeout(() => {
       setShowCorruption(true)
+      setAnimationPhase('chaos')
       setCorruptedLines([...messages])
       // Initialize high-density biological grid (finer for better utilization)
       const cols = Math.floor(window.innerWidth / 6); // Finer grid
@@ -241,10 +251,119 @@ export default function Home() {
     const showcaseEndTime = 30000 // 30 seconds showcase period
     const cyclesBeforeDecay = 3
     const decayDuration = 15000 // fade out over 15s
+    const chaosEndTime = showcaseEndTime + Math.random() * 2000 // Random end between 30-32 seconds
 
     const interval = setInterval(() => {
       const elapsed = Date.now() - startTime
       const isShowcase = elapsed < showcaseEndTime
+      
+      // Transition to antimony phase after chaos ends
+      if (animationPhase === 'chaos' && elapsed >= chaosEndTime) {
+        setAnimationPhase('antimony')
+        setAntimonyText('antimony')
+        setCorruptedLines(['antimony'])
+        setTerminalSuppressed(true)
+        terminalSuppressedRef.current = true
+        return
+      }
+      
+      // Handle antimony -> Sb corruption
+      if (animationPhase === 'antimony') {
+        const antimonyElapsed = elapsed - chaosEndTime
+        if (antimonyElapsed > 2000) {
+          setAnimationPhase('sb')
+          setAntimonyText('Sb')
+          setCorruptedLines(['Sb'])
+        } else {
+          // Gradually corrupt antimony text
+          const corruptionProgress = antimonyElapsed / 2000
+          if (corruptionProgress > 0.5) {
+            const baseText = 'antimony'
+            const chars = baseText.split('')
+            const corrupted = chars.map((char, i) => {
+              if (Math.random() < (corruptionProgress - 0.5) * 2) {
+                return getRandomExtendedChar()
+              }
+              return char
+            }).join('')
+            if (corrupted !== antimonyText) {
+              setAntimonyText(corrupted)
+            }
+          }
+        }
+        return
+      }
+      
+      // Handle Sb -> white transition
+      if (animationPhase === 'sb') {
+        const sbElapsed = elapsed - chaosEndTime - 2000
+        if (sbElapsed > 1500) {
+          setAnimationPhase('white')
+          setCorruptedLines([])
+        }
+        return
+      }
+      
+      // Handle white -> circle transition
+      if (animationPhase === 'white') {
+        const whiteElapsed = elapsed - chaosEndTime - 3500
+        if (whiteElapsed > 1000) {
+          setAnimationPhase('circle')
+          const maxRadius = Math.max(window.innerWidth, window.innerHeight) * 0.7
+          setCircleRadius(maxRadius)
+        }
+        return
+      }
+      
+      // Handle circle closing animation
+      if (animationPhase === 'circle') {
+        const circleElapsed = elapsed - chaosEndTime - 4500
+        const maxRadius = Math.max(window.innerWidth, window.innerHeight) * 0.7
+        const duration = 2000 // 2 seconds to close
+        const progress = Math.min(1, circleElapsed / duration)
+        const newRadius = Math.max(0, maxRadius * (1 - progress))
+        setCircleRadius(newRadius)
+        
+        if (progress >= 1) {
+          setAnimationPhase('explosion')
+          // Initialize explosion lines - going to extreme edges
+          const centerX = window.innerWidth / 2
+          const centerY = window.innerHeight / 2
+          const maxDist = Math.sqrt(window.innerWidth * window.innerWidth + window.innerHeight * window.innerHeight) / 2
+          const colors = ['#39ff14', '#ff1493', '#00ffff', '#ffb84d', '#ffff00', '#ff00ff', '#00ff00', '#ff0000', '#ffffff']
+          const lines: Array<{x: number, y: number, angle: number, color: string, progress: number}> = []
+          for (let i = 0; i < 300; i++) {
+            const angle = (Math.PI * 2 / 300) * i
+            lines.push({
+              x: centerX,
+              y: centerY,
+              angle,
+              color: colors[Math.floor(Math.random() * colors.length)],
+              progress: 0
+            })
+          }
+          setExplosionLines(lines)
+        }
+        return
+      }
+      
+      // Handle explosion animation
+      if (animationPhase === 'explosion') {
+        const explosionElapsed = elapsed - chaosEndTime - 6500
+        const duration = 3000 // 3 seconds explosion
+        const progress = Math.min(1, explosionElapsed / duration)
+        
+        setExplosionLines(prev => prev.map(line => ({
+          ...line,
+          progress: progress
+        })))
+        return
+      }
+      
+      // Don't run chaos logic if we're past chaos phase
+      if (animationPhase !== 'chaos') {
+        return
+      }
       
       // Precise 10-second sine wave cycle (0 -> 1 -> 0)
       // In showcase mode, make cycles slightly faster to show all phases
@@ -549,11 +668,11 @@ export default function Home() {
     }, 100)
 
     return () => clearInterval(interval)
-  }, [showCorruption])
+  }, [showCorruption, animationPhase, antimonyText])
 
   // --- Pixel-Based Creepy Biological Background ---
   useEffect(() => {
-    if (!showCorruption || !backgroundCanvasRef.current) return
+    if (!showCorruption || !backgroundCanvasRef.current || animationPhase !== 'chaos') return
 
     const canvas = backgroundCanvasRef.current
     const ctx = canvas.getContext('2d', { alpha: false })
@@ -1622,7 +1741,55 @@ export default function Home() {
       window.removeEventListener('resize', resizeCanvas)
       cancelAnimationFrame(animationFrame)
     }
-  }, [showCorruption])
+  }, [showCorruption, animationPhase])
+
+  // Explosion canvas animation
+  useEffect(() => {
+    if (animationPhase !== 'explosion' || !explosionCanvasRef.current) return
+
+    const canvas = explosionCanvasRef.current
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+
+    const resizeCanvas = () => {
+      canvas.width = window.innerWidth
+      canvas.height = window.innerHeight
+    }
+    resizeCanvas()
+    window.addEventListener('resize', resizeCanvas)
+
+    const animate = () => {
+      ctx.fillStyle = '#000000'
+      ctx.fillRect(0, 0, canvas.width, canvas.height)
+
+      const centerX = canvas.width / 2
+      const centerY = canvas.height / 2
+      const maxDistance = Math.sqrt(canvas.width * canvas.width + canvas.height * canvas.height) / 2
+
+      explosionLines.forEach(line => {
+        const distance = line.progress * maxDistance
+        const endX = centerX + Math.cos(line.angle) * distance
+        const endY = centerY + Math.sin(line.angle) * distance
+
+        ctx.strokeStyle = line.color
+        ctx.lineWidth = 2
+        ctx.globalAlpha = 1 - line.progress * 0.3
+        ctx.beginPath()
+        ctx.moveTo(centerX, centerY)
+        ctx.lineTo(endX, endY)
+        ctx.stroke()
+      })
+
+      ctx.globalAlpha = 1
+      requestAnimationFrame(animate)
+    }
+
+    animate()
+
+    return () => {
+      window.removeEventListener('resize', resizeCanvas)
+    }
+  }, [animationPhase, explosionLines])
 
   return (
     <main 
@@ -1630,11 +1797,67 @@ export default function Home() {
       ref={containerRef}
       style={{ 
         overflow: 'hidden',
-        position: 'relative'
+        position: 'relative',
+        backgroundColor: animationPhase === 'white' ? '#ffffff' : animationPhase === 'circle' || animationPhase === 'explosion' ? '#000000' : undefined
       }}
     >
+      {/* White screen overlay */}
+      {animationPhase === 'white' && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100vw',
+          height: '100vh',
+          backgroundColor: '#ffffff',
+          zIndex: 1000,
+          pointerEvents: 'none'
+        }} />
+      )}
+
+      {/* Closing circle */}
+      {animationPhase === 'circle' && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100vw',
+          height: '100vh',
+          backgroundColor: '#000000',
+          zIndex: 1001,
+          pointerEvents: 'none',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center'
+        }}>
+          <div style={{
+            width: `${circleRadius * 2}px`,
+            height: `${circleRadius * 2}px`,
+            borderRadius: '50%',
+            backgroundColor: '#ffffff',
+            transition: 'width 0.016s linear, height 0.016s linear'
+          }} />
+        </div>
+      )}
+
+      {/* Explosion canvas */}
+      {animationPhase === 'explosion' && (
+        <canvas
+          ref={explosionCanvasRef}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100vw',
+            height: '100vh',
+            zIndex: 1002,
+            pointerEvents: 'none'
+          }}
+        />
+      )}
+
       {/* Pixel-Based Creepy Biological Background Canvas */}
-      {showCorruption && (
+      {showCorruption && animationPhase === 'chaos' && (
         <canvas
           ref={backgroundCanvasRef}
           className="biological-canvas"
@@ -1653,9 +1876,22 @@ export default function Home() {
       
       <div className="terminal" style={{
         position: 'relative',
-        zIndex: 1
+        zIndex: animationPhase === 'white' || animationPhase === 'circle' || animationPhase === 'explosion' ? 1003 : 1
       }}>
-        {!terminalSuppressed && (!showCorruption ? displayedLines : corruptedLines).map((line, index) => (
+        {/* Antimony/Sb text */}
+        {(animationPhase === 'antimony' || animationPhase === 'sb') && (
+          <div className="line" style={{
+            fontSize: '48px',
+            textAlign: 'center',
+            marginTop: '50vh',
+            transform: 'translateY(-50%)',
+            color: '#ffb84d'
+          }}>
+            <span className="text">{antimonyText}</span>
+          </div>
+        )}
+        
+        {!terminalSuppressed && animationPhase === 'chaos' && (!showCorruption ? displayedLines : corruptedLines).map((line, index) => (
           <div 
             key={index} 
             className="line"
@@ -1694,7 +1930,7 @@ export default function Home() {
         )}
       </div>
 
-      {showCorruption && (
+      {showCorruption && animationPhase === 'chaos' && (
         <div className="performance-overlay">
           <div className="perf-row">
             clouds {ecosystemHUD.clouds} | apex {ecosystemHUD.apex} | wave {ecosystemHUD.wave}

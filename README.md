@@ -46,3 +46,16 @@ vercel --prod
 - TypeScript
 - CSS3 (with animations)
 
+## Development Workflow
+
+This repository uses GitHub Actions for automated CI/CD. See [.github/WORKFLOW.md](.github/WORKFLOW.md) for detailed documentation.
+
+**Quick workflow:**
+1. Create an issue using the "Work Item" template
+2. Create a branch (e.g., `issue-123`)
+3. Make changes and push - tests run automatically
+4. PR is created automatically when tests pass
+5. Vercel deploys a preview automatically
+6. Review and merge when ready
+7. Issue and PR close automatically on merge
+

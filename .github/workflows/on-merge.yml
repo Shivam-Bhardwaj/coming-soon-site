@@ -1,0 +1,71 @@
+name: On Merge to Main
+
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  close-issue-and-pr:
+    name: Close Issue and PR
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.merged == true
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run final tests
+        run: |
+          npm ci
+          npm run lint
+          npm test
+          npm run build
+
+      - name: Close associated issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const prBody = pr.body || '';
+            
+            // Look for issue references in PR body (e.g., "Fixes #123" or "Closes #123")
+            const issueMatch = prBody.match(/(?:fixes|closes|resolves)\s+#(\d+)/i);
+            
+            if (issueMatch) {
+              const issueNumber = issueMatch[1];
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issueNumber,
+                state: 'closed'
+              });
+              console.log(`Closed issue #${issueNumber}`);
+            } else {
+              // Try to find issue from PR title or branch name
+              const branchName = pr.head.ref;
+              const issueMatchFromBranch = branchName.match(/issue[_-]?(\d+)/i);
+              
+              if (issueMatchFromBranch) {
+                const issueNumber = issueMatchFromBranch[1];
+                await github.rest.issues.update({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issueNumber,
+                  state: 'closed'
+                });
+                console.log(`Closed issue #${issueNumber} from branch name`);
+              }
+            }
+
+      - name: Add comment to PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr.number,
+              body: '✅ Merged to main. All tests passed. PR and associated issue closed.'
+            });
+
