@@ -119,6 +119,22 @@ export default function Home() {
   const growthMetricsRef = useRef({ coverage: 0, avgIntensity: 0, entropy: 0 })
   const organismMetricsRef = useRef({ avgEnergy: 0, diversity: 0 })
   const metricsFrameRef = useRef(0)
+  const sparkChars = ['▁','▂','▃','▄','▅','▆','▇','█']
+  const metricHistoryRef = useRef<{ coverage: number[]; energy: number[] }>({ coverage: [], energy: [] })
+  const historyLimit = 32
+
+  const pushHistoryPoint = (key: 'coverage' | 'energy', value: number) => {
+    const history = metricHistoryRef.current[key]
+    history.push(Math.max(0, Math.min(1, value)))
+    if (history.length > historyLimit) history.shift()
+  }
+
+  const getSparkline = (key: 'coverage' | 'energy') => {
+    const history = metricHistoryRef.current[key]
+    if (history.length === 0) return ''.padEnd(12, '▁')
+    return history.map(v => sparkChars[Math.min(sparkChars.length - 1, Math.floor(v * (sparkChars.length - 1)))])
+      .join('').slice(-historyLimit)
+  }
   const backgroundCanvasRef = useRef<HTMLCanvasElement>(null);
 
   // Adaptive performance refs
@@ -726,7 +742,7 @@ export default function Home() {
     const ensureAmbientGrowth = (targetCap: number) => {
       if (growthMap.size > targetCap * 0.55) return
       const deficit = Math.max(0, targetCap * 0.55 - growthMap.size)
-      const seeds = Math.min(300, Math.floor(deficit / 60))
+      const seeds = Math.min(450, Math.floor(deficit / 45))
       if (seeds <= 0) return
       const palette = ['#39ff14', '#ff1493', '#00ffff', '#ffb84d', '#ffff00']
       for (let i = 0; i < seeds; i++) {
@@ -968,7 +984,7 @@ export default function Home() {
       updatePopulationCounts()
       recordPerf('populationCounts', performance.now() - populationStart)
 
-      if (Date.now() - lastCloudSpawn > 5000 && Math.random() < 0.15) {
+      if (Date.now() - lastCloudSpawn > 3500 && Math.random() < 0.25) {
         spawnNutrientCloud()
       }
       updateNutrientClouds()
@@ -1005,11 +1021,12 @@ export default function Home() {
         org.energy -= org.type === 'apex' ? 0.22 : 0.12
         
         const moveParams: Record<string, [number, number]> = {
-          fly: [0.5, 0.94],
-          worm: [0.08, 0.985],
-          beetle: [0.12, 0.965],
-          mite: [0.3, 0.95],
-          default: [0.15, 0.97]
+          fly: [0.8, 0.92],
+          worm: [0.12, 0.982],
+          beetle: [0.18, 0.955],
+          mite: [0.4, 0.94],
+          apex: [0.65, 0.93],
+          default: [0.22, 0.96]
         }
         const [moveStrength, friction] = moveParams[org.type] || moveParams.default
         org.vx += (Math.random() - 0.5) * moveStrength
@@ -1269,10 +1286,10 @@ export default function Home() {
         // Reproduction rates vary by type and conditions
         let reproductionRate = 0
         if (org.type === 'apex') reproductionRate = 0
-        else if (org.type === 'mite') reproductionRate = canReproduce ? 0.04 : 0
-        else if (org.type === 'fly') reproductionRate = canReproduce ? 0.03 : 0
-        else if (org.type === 'beetle') reproductionRate = canReproduce && population < 20 ? 0.02 : 0
-        else reproductionRate = canReproduce ? 0.015 : 0
+        else if (org.type === 'mite') reproductionRate = canReproduce ? 0.05 : 0
+        else if (org.type === 'fly') reproductionRate = canReproduce ? 0.04 : 0
+        else if (org.type === 'beetle') reproductionRate = canReproduce && population < 20 ? 0.025 : 0
+        else reproductionRate = canReproduce ? 0.018 : 0
         
         // Overpopulation penalty
         if (population > (maxPopulation[org.type] || 50) * 0.8) {
@@ -1329,6 +1346,8 @@ export default function Home() {
         avgEnergy: organismMetricsRef.current.avgEnergy,
         diversity: organismMetricsRef.current.diversity,
       }
+      pushHistoryPoint('coverage', ecosystemStateRef.current.coverage)
+      pushHistoryPoint('energy', Math.min(1, ecosystemStateRef.current.avgEnergy / 180))
 
       // Spread growth organically
       const spreadStart = performance.now()
@@ -1366,6 +1385,9 @@ export default function Home() {
           }
         })
         growthMetricsRef.current = calculateGrowthMetrics(samples, canvas.width * canvas.height, activeCells)
+        if (growthMetricsRef.current.coverage < 0.4) {
+          ensureAmbientGrowth(Math.max(30000, Math.floor(growthMapCapRef.current * 1.1)))
+        }
       }
 
       // Render pixel data - OPTIMIZED: Single pass, limit iterations, batch operations
@@ -1577,6 +1599,12 @@ export default function Home() {
           </div>
           <div className="perf-row">
             energy {ecosystemHUD.avgEnergy.toFixed(1)} | diversity {ecosystemHUD.diversity}
+          </div>
+          <div className="perf-row">
+            cov {getSparkline('coverage')}
+          </div>
+          <div className="perf-row">
+            eng {getSparkline('energy')}
           </div>
           {perfSnapshot.map(({ name, avg, max }) => (
             <div className="perf-row" key={name}>
