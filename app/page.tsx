@@ -113,6 +113,7 @@ export default function Home() {
   const [biologicalColonies, setBiologicalColonies] = useState<GrowthColony[]>([]);
   const [biologicalColorMap, setBiologicalColorMap] = useState<Map<string, GrowthType>>(new Map());
   const [animationPhase, setAnimationPhase] = useState<'chaos' | 'antimony' | 'sb' | 'white' | 'circle' | 'explosion'>('chaos')
+  const animationPhaseRef = useRef<'chaos' | 'antimony' | 'sb' | 'white' | 'circle' | 'explosion'>('chaos')
   const [antimonyText, setAntimonyText] = useState('antimony')
   const [circleRadius, setCircleRadius] = useState(0)
   const [explosionLines, setExplosionLines] = useState<Array<{x: number, y: number, angle: number, color: string, progress: number}>>([])
@@ -170,6 +171,7 @@ export default function Home() {
       terminalSuppressedRef.current = false
       corruptionDecayRef.current = { started: false, startTime: 0 }
       setLinkLabel(X_LINK_LABEL_FULL)
+      animationPhaseRef.current = 'chaos'
       setAnimationPhase('chaos')
       setAntimonyText('antimony')
       setCircleRadius(0)
@@ -204,6 +206,7 @@ export default function Home() {
       // Start the corruption cycle after the link appears
       setTimeout(() => {
       setShowCorruption(true)
+      animationPhaseRef.current = 'chaos'
       setAnimationPhase('chaos')
       setCorruptedLines([...messages])
       // Initialize high-density biological grid (finer for better utilization)
@@ -248,17 +251,19 @@ export default function Home() {
     if (!showCorruption) return
 
     const startTime = Date.now()
-    const showcaseEndTime = 30000 // 30 seconds showcase period
-    const cyclesBeforeDecay = 3
-    const decayDuration = 15000 // fade out over 15s
-    const chaosEndTime = showcaseEndTime + Math.random() * 2000 // Random end between 30-32 seconds
+    const showcaseEndTime = 5000 // 5 seconds showcase period - quick to see the bang
+    const cyclesBeforeDecay = 1
+    const decayDuration = 2000 // fade out over 2s
+    // Calculate chaos end time once - random between 5-7 seconds
+    const chaosEndTime = showcaseEndTime + Math.random() * 2000
 
     const interval = setInterval(() => {
       const elapsed = Date.now() - startTime
       const isShowcase = elapsed < showcaseEndTime
       
       // Transition to antimony phase after chaos ends
-      if (animationPhase === 'chaos' && elapsed >= chaosEndTime) {
+      if (animationPhaseRef.current === 'chaos' && elapsed >= chaosEndTime) {
+        animationPhaseRef.current = 'antimony'
         setAnimationPhase('antimony')
         setAntimonyText('antimony')
         setCorruptedLines(['antimony'])
@@ -268,20 +273,21 @@ export default function Home() {
       }
       
       // Handle antimony -> Sb corruption
-      if (animationPhase === 'antimony') {
+      if (animationPhaseRef.current === 'antimony') {
         const antimonyElapsed = elapsed - chaosEndTime
-        if (antimonyElapsed > 2000) {
+        if (antimonyElapsed > 800) {
+          animationPhaseRef.current = 'sb'
           setAnimationPhase('sb')
           setAntimonyText('Sb')
           setCorruptedLines(['Sb'])
         } else {
           // Gradually corrupt antimony text
-          const corruptionProgress = antimonyElapsed / 2000
-          if (corruptionProgress > 0.5) {
+          const corruptionProgress = antimonyElapsed / 800
+          if (corruptionProgress > 0.3) {
             const baseText = 'antimony'
             const chars = baseText.split('')
             const corrupted = chars.map((char, i) => {
-              if (Math.random() < (corruptionProgress - 0.5) * 2) {
+              if (Math.random() < (corruptionProgress - 0.3) * 1.5) {
                 return getRandomExtendedChar()
               }
               return char
@@ -295,9 +301,10 @@ export default function Home() {
       }
       
       // Handle Sb -> white transition
-      if (animationPhase === 'sb') {
-        const sbElapsed = elapsed - chaosEndTime - 2000
-        if (sbElapsed > 1500) {
+      if (animationPhaseRef.current === 'sb') {
+        const sbElapsed = elapsed - chaosEndTime - 800
+        if (sbElapsed > 500) {
+          animationPhaseRef.current = 'white'
           setAnimationPhase('white')
           setCorruptedLines([])
         }
@@ -305,9 +312,10 @@ export default function Home() {
       }
       
       // Handle white -> circle transition
-      if (animationPhase === 'white') {
-        const whiteElapsed = elapsed - chaosEndTime - 3500
-        if (whiteElapsed > 1000) {
+      if (animationPhaseRef.current === 'white') {
+        const whiteElapsed = elapsed - chaosEndTime - 1300
+        if (whiteElapsed > 300) {
+          animationPhaseRef.current = 'circle'
           setAnimationPhase('circle')
           const maxRadius = Math.max(window.innerWidth, window.innerHeight) * 0.7
           setCircleRadius(maxRadius)
@@ -316,15 +324,16 @@ export default function Home() {
       }
       
       // Handle circle closing animation
-      if (animationPhase === 'circle') {
-        const circleElapsed = elapsed - chaosEndTime - 4500
+      if (animationPhaseRef.current === 'circle') {
+        const circleElapsed = elapsed - chaosEndTime - 1600
         const maxRadius = Math.max(window.innerWidth, window.innerHeight) * 0.7
-        const duration = 2000 // 2 seconds to close
+        const duration = 800 // 0.8 seconds to close - quick!
         const progress = Math.min(1, circleElapsed / duration)
         const newRadius = Math.max(0, maxRadius * (1 - progress))
         setCircleRadius(newRadius)
         
         if (progress >= 1) {
+          animationPhaseRef.current = 'explosion'
           setAnimationPhase('explosion')
           // Initialize explosion lines - going to extreme edges
           const centerX = window.innerWidth / 2
@@ -347,27 +356,37 @@ export default function Home() {
         return
       }
       
-      // Handle explosion animation
-      if (animationPhase === 'explosion') {
-        const explosionElapsed = elapsed - chaosEndTime - 6500
-        const duration = 3000 // 3 seconds explosion
+      // Handle explosion animation - then return to chaos for life to form
+      if (animationPhaseRef.current === 'explosion') {
+        const explosionElapsed = elapsed - chaosEndTime - 2400
+        const duration = 1200 // 1.2 seconds explosion - quick bang!
         const progress = Math.min(1, explosionElapsed / duration)
         
         setExplosionLines(prev => prev.map(line => ({
           ...line,
           progress: progress
         })))
+        
+        // After explosion, return to chaos phase so life can continue forming
+        if (progress >= 1) {
+          animationPhaseRef.current = 'chaos'
+          setAnimationPhase('chaos')
+          setTerminalSuppressed(false)
+          terminalSuppressedRef.current = false
+          // Reset explosion lines but keep biological growth going
+          setExplosionLines([])
+        }
         return
       }
       
       // Don't run chaos logic if we're past chaos phase
-      if (animationPhase !== 'chaos') {
+      if (animationPhaseRef.current !== 'chaos') {
         return
       }
       
-      // Precise 10-second sine wave cycle (0 -> 1 -> 0)
-      // In showcase mode, make cycles slightly faster to show all phases
-      const cycleSpeed = isShowcase ? 8000 : 10000 // 8s cycles in showcase, 10s after
+      // Precise sine wave cycle (0 -> 1 -> 0) - faster cycles for quicker transitions
+      // In showcase mode, make cycles faster to show all phases quickly
+      const cycleSpeed = isShowcase ? 2000 : 3000 // 2s cycles in showcase, 3s after
       const intensity = (Math.sin(elapsed / (cycleSpeed / (2 * Math.PI))) + 1) / 2
 
       if (!corruptionDecayRef.current.started && elapsed >= cycleSpeed * cyclesBeforeDecay) {
@@ -672,7 +691,10 @@ export default function Home() {
 
   // --- Pixel-Based Creepy Biological Background ---
   useEffect(() => {
-    if (!showCorruption || !backgroundCanvasRef.current || animationPhase !== 'chaos') return
+    // Run biological canvas during chaos phase (before and after explosion)
+    if (!showCorruption || !backgroundCanvasRef.current) return
+    // Allow canvas to run during chaos phase (initial and after explosion)
+    if (animationPhase !== 'chaos' && animationPhase !== 'explosion') return
 
     const canvas = backgroundCanvasRef.current
     const ctx = canvas.getContext('2d', { alpha: false })
