@@ -38,6 +38,12 @@ interface Sprite {
   age: number; // For reproduction/cannibalism
 }
 
+interface PerfSnapshot {
+  name: string;
+  avg: number;
+  max: number;
+}
+
 // Full screen art patterns - beautiful patterns
 const fullScreenPatterns = [
   `
@@ -106,11 +112,13 @@ export default function Home() {
   const [fungusGrid, setFungusGrid] = useState<string[][]>([]);
   const [biologicalColonies, setBiologicalColonies] = useState<GrowthColony[]>([]);
   const [biologicalColorMap, setBiologicalColorMap] = useState<Map<string, GrowthType>>(new Map());
+  const [perfSnapshot, setPerfSnapshot] = useState<PerfSnapshot[]>([]);
   const backgroundCanvasRef = useRef<HTMLCanvasElement>(null);
 
   // Adaptive performance refs
   const renderBudgetRef = useRef(1.0) // 0.4–1.5 scales work per frame
   const frameTimeAvgRef = useRef(16)  // ms, smoothed
+  const perfStatsRef = useRef<Record<string, { total: number; count: number; max: number }>>({})
 
   // Refs to avoid stale state in interval-driven biology updates
   const fungusGridRef = useRef<string[][]>([]);
@@ -118,6 +126,35 @@ export default function Home() {
   const biologicalColorMapRef = useRef<Map<string, GrowthType>>(new Map());
 
   const containerRef = useRef<HTMLDivElement>(null)
+
+  const recordPerf = (label: string, duration: number) => {
+    if (!Number.isFinite(duration)) return
+    const stats = perfStatsRef.current[label] || { total: 0, count: 0, max: 0 }
+    stats.total += duration
+    stats.count += 1
+    stats.max = Math.max(stats.max, duration)
+    perfStatsRef.current[label] = stats
+  }
+
+  useEffect(() => {
+    if (!showCorruption) {
+      setPerfSnapshot([])
+      perfStatsRef.current = {}
+      return
+    }
+    const interval = setInterval(() => {
+      const stats = perfStatsRef.current
+      const snapshot = Object.entries(stats).map(([name, value]) => ({
+        name,
+        avg: value.count ? value.total / value.count : 0,
+        max: value.max || 0,
+      }))
+      snapshot.sort((a, b) => b.avg - a.avg)
+      setPerfSnapshot(snapshot.slice(0, 6))
+      perfStatsRef.current = {}
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [showCorruption])
 
   useEffect(() => {
     if (currentLineIndex >= messages.length) {
@@ -193,16 +230,19 @@ export default function Home() {
       const effectiveIntensity = isShowcase ? Math.min(1, intensity * 1.2) : intensity
       
       setCorruptedLines((prev) => {
+        const start = performance.now()
         let linesToCorrupt = [...messages] // Start from original messages for stability
-  
+
         if (currentPhase === 'controlled') {
-          return linesToCorrupt.map((line) => {
+          const result = linesToCorrupt.map((line) => {
             // Fade out corruption as intensity drops
             if (Math.random() < effectiveIntensity * 0.3) {
               return controlledCorruption(line)
             }
             return line
           })
+          recordPerf('textCorruption', performance.now() - start)
+          return result
         } else if (currentPhase === 'chaos') {
           // Biology starts taking over in chaos phase
           if (Math.random() < effectiveIntensity * 0.6) {
@@ -229,12 +269,14 @@ export default function Home() {
             linesToCorrupt.push(newLine)
           }
           
-          return linesToCorrupt.map((line) => {
+          const result = linesToCorrupt.map((line) => {
             if (Math.random() < effectiveIntensity * 0.7) {
               return chaosCorruption(line, effectiveIntensity)
             }
             return line
           }).slice(-15)
+          recordPerf('textCorruption', performance.now() - start)
+          return result
         } else { // Art phase - Biology fully takes over
           // Aggressive biological takeover - always grow in art phase
           const result = growBiologicalColonies(
@@ -258,32 +300,40 @@ export default function Home() {
             linesToCorrupt.push(...fullScreenPatterns[Math.floor(Math.random() * fullScreenPatterns.length)].split('\n'))
           }
           
-          return linesToCorrupt.map((line) => {
+          const lineResult = linesToCorrupt.map((line) => {
             if (Math.random() < effectiveIntensity) {
               return chaosCorruption(line, effectiveIntensity)
             }
             return line
           }).slice(-25)
+          recordPerf('textCorruption', performance.now() - start)
+          return lineResult
         }
       })
 
       // Update sprite positions
-      setSprites(prev => prev.map(sprite => {
-        let newX = sprite.x + sprite.vx
-        let newY = sprite.y + sprite.vy
+      setSprites(prev => {
+        const start = performance.now()
+        const updated = prev.map(sprite => {
+          let newX = sprite.x + sprite.vx
+          let newY = sprite.y + sprite.vy
 
-        // Boundary bounce
-        if (newX < 0 || newX > 100) sprite.vx = -sprite.vx
+          // Boundary bounce
+          if (newX < 0 || newX > 100) sprite.vx = -sprite.vx
         if (newY < 0 || newY > 100) sprite.vy = -sprite.vy
 
         newX = Math.max(0, Math.min(100, newX))
         newY = Math.max(0, Math.min(100, newY))
 
-        return {...sprite, x: newX, y: newY}
-      }))
+          return {...sprite, x: newX, y: newY}
+        })
+        recordPerf('spritePositions', performance.now() - start)
+        return updated
+      })
 
       // Sprite Behaviors
       setSprites(prev => {
+        const start = performance.now()
         let newSprites = [...prev]
         const isShowcase = elapsed < showcaseEndTime
         const effectiveIntensity = isShowcase ? Math.min(1, intensity * 1.2) : intensity
@@ -422,7 +472,9 @@ export default function Home() {
           }
         }
 
-        return newSprites.slice(-120) // Increased limit for better space utilization
+        const result = newSprites.slice(-120) // Increased limit for better space utilization
+        recordPerf('spriteBehavior', performance.now() - start)
+        return result
       })
     }, 100)
 
@@ -649,6 +701,7 @@ export default function Home() {
       const currentTime = Date.now()
       const deltaTime = Math.min(100, currentTime - lastTime)
       lastTime = currentTime
+      const frameStart = performance.now()
 
       // Smooth frame time and adapt budget
       frameTimeAvgRef.current = frameTimeAvgRef.current * 0.9 + deltaTime * 0.1
@@ -663,10 +716,13 @@ export default function Home() {
       ctx.fillStyle = '#0a0a0a'
       ctx.fillRect(0, 0, canvas.width, canvas.height)
 
-      // Decay old growth - OPTIMIZED: Batch deletions, limit iterations
+      const budget = renderBudgetRef.current
+
+      // Decay & cleanup profiling
+      const decayStart = performance.now()
       const toDelete: string[] = []
       let decayCount = 0
-      const maxDecay = 1500
+      const maxDecay = Math.max(400, Math.floor(1500 * budget))
       
       growthMap.forEach((value, key) => {
         if (decayCount++ > maxDecay) return
@@ -681,12 +737,12 @@ export default function Home() {
       })
       toDelete.forEach(k => growthMap.delete(k))
       
-      // Aggressive cleanup if map too large
       if (growthMap.size > 10000) {
         const cleanup: string[] = []
         let cleanupCount = 0
+        const maxCleanup = Math.max(1000, Math.floor(5000 * budget))
         growthMap.forEach((value, key) => {
-          if (cleanupCount++ > 5000) return
+          if (cleanupCount++ > maxCleanup) return
           if (key.includes('_color')) return
           const intensity = typeof value === 'number' ? value : 0
           if (intensity < 30) {
@@ -696,12 +752,15 @@ export default function Home() {
         })
         cleanup.forEach(k => growthMap.delete(k))
       }
+      recordPerf('decayCleanup', performance.now() - decayStart)
 
-      // Regenerate resources
+      const regenStart = performance.now()
       regenerateResources()
+      recordPerf('resourceRegen', performance.now() - regenStart)
       
-      // Update population counts once - O(n) instead of O(n²)
+      const populationStart = performance.now()
       updatePopulationCounts()
+      recordPerf('populationCounts', performance.now() - populationStart)
       
       // Spatial partitioning for organism interactions - O(n) instead of O(n²)
       const gridSize = 40
@@ -718,6 +777,7 @@ export default function Home() {
         spatialGrid.get(gridKey)!.push(idx)
       })
       
+      const organismsStart = performance.now()
       const organismsToRemove: number[] = []
       const competitionStrength: Record<string, number> = {
         beetle: 2, fly: 0.5, mite: 0.3, worm: 1,
@@ -996,11 +1056,15 @@ export default function Home() {
           organisms.splice(idx, 1)
         }
       })
+      recordPerf('organismLoop', performance.now() - organismsStart)
 
       // Spread growth organically
+      const spreadStart = performance.now()
       spreadGrowth()
+      recordPerf('spreadGrowth', performance.now() - spreadStart)
 
       // Render pixel data - OPTIMIZED: Single pass, limit iterations, batch operations
+      const renderGrowthStart = performance.now()
       const imageData = ctx.createImageData(canvas.width, canvas.height)
       let renderCount = 0
       const baseMaxRender = 7000
@@ -1039,8 +1103,10 @@ export default function Home() {
         imageData.data[idx + 3] = Math.min(255, alpha)
       })
       ctx.putImageData(imageData, 0, 0)
+      recordPerf('renderGrowth', performance.now() - renderGrowthStart)
       
       // Render organisms - ensure they're visible
+      const renderOrganStart = performance.now()
       organisms.forEach((org) => {
         if (!org) return
         const px = Math.floor(org.x)
@@ -1082,6 +1148,7 @@ export default function Home() {
         ctx.shadowBlur = 0
         ctx.globalAlpha = 1
       })
+      recordPerf('renderOrganisms', performance.now() - renderOrganStart)
 
       // Spawn new organisms - OPTIMIZED: Use cached population counts
       if (Math.random() < 0.04 * Math.min(1, renderBudgetRef.current) && organisms.length < Math.floor(300 * renderBudgetRef.current)) {
@@ -1110,6 +1177,7 @@ export default function Home() {
         }
       }
 
+      recordPerf('frame', performance.now() - frameStart)
       animationFrame = requestAnimationFrame(animate)
     }
 
@@ -1190,6 +1258,19 @@ export default function Home() {
           </div>
         )}
       </div>
+
+      {showCorruption && perfSnapshot.length > 0 && (
+        <div className="performance-overlay">
+          <div className="perf-row">
+            budget {renderBudgetRef.current.toFixed(2)} | frame {frameTimeAvgRef.current.toFixed(1)}ms
+          </div>
+          {perfSnapshot.map(({ name, avg, max }) => (
+            <div className="perf-row" key={name}>
+              {name}: {avg.toFixed(1)}ms (max {max.toFixed(1)}ms)
+            </div>
+          ))}
+        </div>
+      )}
     </main>
   )
 }
