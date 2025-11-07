@@ -462,6 +462,10 @@ export default function Home() {
   const [biologicalColorMap, setBiologicalColorMap] = useState<Map<string, GrowthType>>(new Map());
   const backgroundCanvasRef = useRef<HTMLCanvasElement>(null);
 
+  // Adaptive performance refs
+  const renderBudgetRef = useRef(1.0) // 0.4–1.5 scales work per frame
+  const frameTimeAvgRef = useRef(16)  // ms, smoothed
+
   // Refs to avoid stale state in interval-driven biology updates
   const fungusGridRef = useRef<string[][]>([]);
   const biologicalColoniesRef = useRef<GrowthColony[]>([]);
@@ -637,11 +641,13 @@ export default function Home() {
         let newSprites = [...prev]
         const isShowcase = elapsed < showcaseEndTime
         const effectiveIntensity = isShowcase ? Math.min(1, intensity * 1.2) : intensity
+        const budget = Math.min(1, renderBudgetRef.current)
 
         // In showcase mode, ensure sprites are active early
         // Also increase sprite count for better space utilization
-        const minSprites = isShowcase ? 25 : 12
-        if (newSprites.length < minSprites && Math.random() < 0.4) {
+        const baseMin = isShowcase ? 25 : 12
+        const minSprites = Math.max(6, Math.floor(baseMin * (0.6 + 0.4 * budget)))
+        if (newSprites.length < minSprites && Math.random() < 0.4 * budget) {
           // Force spawn diverse sprites
           const types: SpriteType[] = ['ant', 'spider', 'plant']
           const spawnType = types[Math.floor(Math.random() * types.length)]
@@ -736,7 +742,7 @@ export default function Home() {
 
         // Spawn new sprites based on intensity
         // Higher spawn rate for better space utilization
-        const spawnRate = isShowcase ? effectiveIntensity * 0.2 : effectiveIntensity * 0.12
+        const spawnRate = (isShowcase ? effectiveIntensity * 0.2 : effectiveIntensity * 0.12) * budget
         if (Math.random() < spawnRate) {
           const newSpriteType: SpriteType = ['ant', 'spider', 'plant'][Math.floor(Math.random() * 3)] as SpriteType
           const newSprite = {
@@ -958,7 +964,7 @@ export default function Home() {
       
       const newGrowthMap = new Map(growthMap)
       let processed = 0
-      const maxProcess = 700 // Limit pixels processed per frame (more action)
+      const maxProcess = Math.max(200, Math.floor(700 * renderBudgetRef.current)) // Adaptive budget
       
       growthMap.forEach((value, key) => {
         if (processed++ > maxProcess) return
@@ -997,6 +1003,15 @@ export default function Home() {
       const currentTime = Date.now()
       const deltaTime = Math.min(100, currentTime - lastTime)
       lastTime = currentTime
+
+      // Smooth frame time and adapt budget
+      frameTimeAvgRef.current = frameTimeAvgRef.current * 0.9 + deltaTime * 0.1
+      const avg = frameTimeAvgRef.current
+      if (avg > 22) {
+        renderBudgetRef.current = Math.max(0.4, renderBudgetRef.current * 0.9)
+      } else if (avg < 16) {
+        renderBudgetRef.current = Math.min(1.5, renderBudgetRef.current * 1.05)
+      }
 
       // Clear with dark background
       ctx.fillStyle = '#0a0a0a'
@@ -1342,7 +1357,8 @@ export default function Home() {
       // Render pixel data - OPTIMIZED: Single pass, limit iterations, batch operations
       const imageData = ctx.createImageData(canvas.width, canvas.height)
       let renderCount = 0
-      const maxRender = 8000 // Higher limit to fill more of the canvas
+      const baseMaxRender = 7000
+      const maxRender = Math.max(1500, Math.floor(baseMaxRender * renderBudgetRef.current))
       const time = Date.now() / 1000
       
       growthMap.forEach((value, key) => {
@@ -1422,7 +1438,7 @@ export default function Home() {
       })
 
       // Spawn new organisms - OPTIMIZED: Use cached population counts
-      if (Math.random() < 0.04 && organisms.length < 300) {
+      if (Math.random() < 0.04 * Math.min(1, renderBudgetRef.current) && organisms.length < Math.floor(300 * renderBudgetRef.current)) {
         const types: PixelOrganism['type'][] = ['spore', 'mycelium', 'insect', 'slime', 'beetle', 'mite', 'worm', 'fly']
         const type = types[Math.floor(Math.random() * types.length)]
         const maxPop: Record<string, number> = {
@@ -1437,7 +1453,7 @@ export default function Home() {
       }
       
       // Ecosystem balance
-      if (organisms.length < 40) {
+      if (organisms.length < Math.floor(40 * (0.6 + 0.4 * Math.min(1, renderBudgetRef.current)))) {
         const types: PixelOrganism['type'][] = ['spore', 'mycelium', 'insect', 'slime', 'beetle', 'mite', 'worm', 'fly']
         for (let i = 0; i < 3; i++) {
           const type = types[Math.floor(Math.random() * types.length)]
