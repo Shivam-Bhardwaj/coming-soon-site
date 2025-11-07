@@ -165,6 +165,8 @@ export default function Home() {
   const terminalSuppressedRef = useRef(false)
   const corruptionDecayRef = useRef({ started: false, startTime: 0 })
 
+  const explosionCompleteTimeRef = useRef<number | null>(null)
+
   useEffect(() => {
     if (!showCorruption) {
       setTerminalSuppressed(false)
@@ -176,6 +178,7 @@ export default function Home() {
       setAntimonyText('antimony')
       setCircleRadius(0)
       setExplosionLines([])
+      explosionCompleteTimeRef.current = null
     }
   }, [showCorruption])
 
@@ -261,8 +264,8 @@ export default function Home() {
       const elapsed = Date.now() - startTime
       const isShowcase = elapsed < showcaseEndTime
       
-      // Transition to antimony phase after chaos ends
-      if (animationPhaseRef.current === 'chaos' && elapsed >= chaosEndTime) {
+      // Transition to antimony phase after chaos ends (but only once, before explosion)
+      if (animationPhaseRef.current === 'chaos' && elapsed >= chaosEndTime && explosionCompleteTimeRef.current === null) {
         animationPhaseRef.current = 'antimony'
         setAnimationPhase('antimony')
         setAntimonyText('antimony')
@@ -378,6 +381,8 @@ export default function Home() {
           terminalSuppressedRef.current = false
           // Reset explosion lines but keep biological growth going
           setExplosionLines([])
+          // Mark explosion as complete so we don't restart the sequence
+          explosionCompleteTimeRef.current = elapsed
         }
         return
       }
