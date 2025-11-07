@@ -34,6 +34,15 @@ const extendedASCII = {
   dots: '•○●◐◑◒◓◔◕◊◈◉',
 }
 
+// --- NEW: Biological Sprites & Patterns ---
+const antSprites = ['_@_v', '_@_>', '<_@_'];
+
+const fungusPatterns = {
+  spores: ['.', '·', '•'],
+  growth: ['░', '▒', '▓', '█'],
+  tendrils: ['/', '\\', '-', '|']
+};
+
 // ASCII art patterns for chaos
 const asciiArtPatterns = [
   '╔══╗', '║▓▓║', '╚══╝',
@@ -183,6 +192,36 @@ function generateBeautifulPattern(): string[] {
   return selectedPattern()
 }
 
+// --- NEW: Fungus Growth Algorithm ---
+function growFungus(grid: string[][], intensity: number): string[][] {
+  const newGrid = grid.map(row => [...row]);
+  const rows = newGrid.length;
+  const cols = newGrid[0].length;
+
+  for (let i = 0; i < Math.floor(intensity * 5); i++) { // Spread more as intensity increases
+    const r = Math.floor(Math.random() * rows);
+    const c = Math.floor(Math.random() * cols);
+
+    if (newGrid[r][c] !== ' ') { // If it's already grown
+      // Spread to neighbors
+      const neighbors = [[r-1, c], [r+1, c], [r, c-1], [r, c+1]];
+      for (const [nr, nc] of neighbors) {
+        if (nr >= 0 && nr < rows && nc >= 0 && nc < cols && Math.random() < 0.3 * intensity) {
+          if (newGrid[nr][nc] === ' ') {
+            newGrid[nr][nc] = fungusPatterns.spores[Math.floor(Math.random() * fungusPatterns.spores.length)];
+          } else if (Math.random() < 0.1 * intensity) {
+            newGrid[nr][nc] = fungusPatterns.growth[Math.floor(Math.random() * fungusPatterns.growth.length)];
+          }
+        }
+      }
+    } else if (Math.random() < 0.05 * intensity) { // New spore
+      newGrid[r][c] = fungusPatterns.spores[0];
+    }
+  }
+  return newGrid;
+}
+
+
 function getRandomExtendedChar(): string {
   const allChars = Object.values(extendedASCII).join('')
   return allChars[Math.floor(Math.random() * allChars.length)]
@@ -311,9 +350,13 @@ export default function Home() {
   const [isTyping, setIsTyping] = useState(true)
   const [corruptedLines, setCorruptedLines] = useState<string[]>([])
   const [showCorruption, setShowCorruption] = useState(false)
-  const [showXLink, setShowXLink] = useState(false) // New state for the link
-  const [phaseIntensity, setPhaseIntensity] = useState(0) // 0 to 1 for smooth transitions
+  const [showXLink, setShowXLink] = useState(false)
+  const [phaseIntensity, setPhaseIntensity] = useState(0)
   const [backgroundArt, setBackgroundArt] = useState<string[]>([])
+  // --- NEW: State for Sprites ---
+  const [sprites, setSprites] = useState<{art: string, x: number, y: number, vx: number, vy: number}[]>([]);
+  const [fungusGrid, setFungusGrid] = useState<string[][]>([]);
+
   const containerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -328,6 +371,10 @@ export default function Home() {
       setTimeout(() => {
         setShowCorruption(true)
         setCorruptedLines([...messages])
+        // Initialize fungus grid
+        const cols = Math.floor(window.innerWidth / 8);
+        const rows = Math.floor(window.innerHeight / 16);
+        setFungusGrid(Array(rows).fill(null).map(() => Array(cols).fill(' ')));
       }, 1200)
       
       return
@@ -359,28 +406,21 @@ export default function Home() {
     if (!showCorruption) return
 
     const startTime = Date.now()
-    let corruptionPhase: 'controlled' | 'chaos' | 'art' = 'controlled';
-
 
     const interval = setInterval(() => {
-      // Use a sine wave for a smooth 0 -> 1 -> 0 oscillation over ~12 seconds
+      // Precise 10-second sine wave cycle (0 -> 1 -> 0)
       const elapsed = Date.now() - startTime
-      const intensity = (Math.sin(elapsed / 4000) + 1) / 2 // Smooth wave
+      const intensity = (Math.sin(elapsed / (10000 / (2 * Math.PI))) + 1) / 2
       setPhaseIntensity(intensity)
 
-      // Determine phase based on intensity
-      if (intensity > 0.8) {
-        corruptionPhase = 'art';
-      } else if (intensity > 0.4) {
-        corruptionPhase = 'chaos';
-      } else {
-        corruptionPhase = 'controlled';
-      }
+      let currentPhase: 'controlled' | 'chaos' | 'art' = 'controlled'
+      if (intensity > 0.3) currentPhase = 'chaos'
+      if (intensity > 0.75) currentPhase = 'art'
       
       setCorruptedLines((prev) => {
         let linesToCorrupt = [...messages] // Start from original messages for stability
 
-        if (corruptionPhase === 'controlled') {
+        if (currentPhase === 'controlled') {
           return linesToCorrupt.map((line) => {
             // Fade out corruption as intensity drops
             if (Math.random() < intensity * 0.3) {
@@ -388,7 +428,18 @@ export default function Home() {
             }
             return line
           })
-        } else if (corruptionPhase === 'chaos') {
+        } else if (currentPhase === 'chaos') {
+          // --- NEW: Ant Sprite Logic ---
+          if (Math.random() < intensity * 0.1) {
+            setSprites(prev => [...prev, {
+              art: antSprites[Math.floor(Math.random() * antSprites.length)],
+              x: Math.random() * 100,
+              y: Math.random() * 100,
+              vx: (Math.random() - 0.5) * 0.5,
+              vy: (Math.random() - 0.5) * 0.5,
+            }].slice(-20)); // Max 20 ants
+          }
+
           if (Math.random() < intensity * 0.2) {
             const newLine = Array(Math.floor(Math.random() * 30)).fill(0)
               .map(() => getRandomExtendedChar()).join('')
@@ -402,7 +453,12 @@ export default function Home() {
             return line
           }).slice(-15)
         } else { // Art phase
+          // --- NEW: Fungus Growth Logic ---
           if (Math.random() < intensity) {
+            setFungusGrid(grid => growFungus(grid, intensity));
+          }
+
+          if (Math.random() < intensity * 0.5) {
             setBackgroundArt(generateBeautifulPattern())
           }
           if (Math.random() < intensity * 0.6) {
@@ -417,7 +473,15 @@ export default function Home() {
           }).slice(-25)
         }
       })
-    }, 100) // Faster interval for smoother visual updates
+
+      // Update sprite positions
+      setSprites(prev => prev.map(sprite => ({
+        ...sprite,
+        x: (sprite.x + sprite.vx + 100) % 100,
+        y: (sprite.y + sprite.vy + 100) % 100,
+      })).filter(() => Math.random() > 0.005)); // Ants have a small chance of dying
+
+    }, 100)
 
     return () => clearInterval(interval)
   }, [showCorruption])
@@ -432,27 +496,29 @@ export default function Home() {
       }}
     >
       {/* Background art layer */}
-      {corruptedLines.length > 0 && corruptedLines[0].includes('x.com/LazyShivam') && (
-        <div style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          width: '100%',
-          height: '100%',
-          opacity: 0.3,
-          pointerEvents: 'none',
-          fontFamily: 'Courier New, monospace',
-          fontSize: '10px',
-          lineHeight: '10px',
-          color: '#ff8c00',
-          whiteSpace: 'pre',
-          overflow: 'hidden'
-        }}>
-          {corruptedLines.map((line, i) => (
+      {showCorruption && backgroundArt.length > 0 && (
+        <div className="background-art">
+          {backgroundArt.map((line, i) => (
             <div key={i}>{line}</div>
           ))}
         </div>
       )}
+
+      {/* --- NEW: Fungus Layer --- */}
+      {showCorruption && fungusGrid.length > 0 && (
+        <div className="fungus-grid">
+          {fungusGrid.map((row, i) => (
+            <div key={i}>{row.join('')}</div>
+          ))}
+        </div>
+      )}
+
+      {/* --- NEW: Ant Sprites Layer --- */}
+      {showCorruption && sprites.map((sprite, i) => (
+        <div key={i} className="sprite" style={{ left: `${sprite.x}%`, top: `${sprite.y}%` }}>
+          {sprite.art}
+        </div>
+      ))}
       
       <div className="terminal" style={{
         position: 'relative',
