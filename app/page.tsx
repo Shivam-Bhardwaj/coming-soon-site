@@ -400,16 +400,21 @@ export default function Home() {
       setCorruptedLines((prev) => {
         const isLastLineXLink = (line: string) => line.includes('x.com/LazyShivam')
         
+        // Always preserve X link line
+        const xLinkLine = prev.find(line => isLastLineXLink(line)) || '> ask him -> x.com/LazyShivam'
+        const otherLines = prev.filter(line => !isLastLineXLink(line))
+        
         // Phase-based corruption
         if (corruptionPhase === 'controlled') {
-          return prev.map((line) => {
+          const corrupted = otherLines.map((line) => {
             // Use inverse intensity - more order when intensity is low
             const corruptionChance = 0.3 * (1 - phaseIntensity)
             if (Math.random() < corruptionChance) {
-              return controlledCorruption(line, isLastLineXLink(line))
+              return controlledCorruption(line, false)
             }
             return line
           })
+          return [...corrupted, xLinkLine]
         } else if (corruptionPhase === 'chaos') {
           // Chaos phase - use smooth phase intensity
           const intensity = phaseIntensity
@@ -420,15 +425,18 @@ export default function Home() {
               .fill(0)
               .map(() => Math.random() < 0.2 ? getRandomEnglishWord() : getRandomExtendedChar())
               .join(Math.random() < 0.3 ? ' ' : '')
-            prev.push(newLine)
+            otherLines.push(newLine)
           }
           
-          return prev.map((line) => {
+          const corrupted = otherLines.map((line) => {
             if (Math.random() < 0.6) {
-              return chaosCorruption(line, intensity, isLastLineXLink(line))
+              return chaosCorruption(line, intensity, false)
             }
             return line
-          }).slice(-15) // Keep only last 15 lines to prevent overflow
+          }).slice(-14) // Keep only last 14 non-X-link lines
+          
+          // Always include X link line at the end
+          return [...corrupted, xLinkLine]
         } else {
           // Art phase - generate beautiful patterns with smooth intensity
           const intensity = phaseIntensity
@@ -442,22 +450,25 @@ export default function Home() {
           // Add full screen patterns
           if (Math.random() < 0.4) {
             const pattern = fullScreenPatterns[Math.floor(Math.random() * fullScreenPatterns.length)]
-            prev.push(...pattern.split('\n').filter(l => l.trim()))
+            otherLines.push(...pattern.split('\n').filter(l => l.trim()))
           }
           
           // Add geometric patterns
           if (Math.random() < 0.3) {
             const geoPattern = geometricPatterns[Math.floor(Math.random() * geometricPatterns.length)]
-            prev.push(geoPattern)
+            otherLines.push(geoPattern)
           }
           
           // Maximum chaos on existing lines
-          return prev.map((line) => {
+          const corrupted = otherLines.map((line) => {
             if (Math.random() < 0.8) {
-              return chaosCorruption(line, intensity, isLastLineXLink(line))
+              return chaosCorruption(line, intensity, false)
             }
             return line
-          }).slice(-25) // Keep more lines in art phase
+          }).slice(-24) // Keep last 24 non-X-link lines
+          
+          // Always include X link line at the end
+          return [...corrupted, xLinkLine]
         }
       })
     }, corruptionSpeed)
@@ -503,19 +514,20 @@ export default function Home() {
       }}>
         {(showCorruption ? corruptedLines : displayedLines).map((line, index) => {
           const isXLink = line.includes('x.com/LazyShivam')
+          // Always show X link line, restore it if corrupted
+          const displayLine = isXLink ? '> ask him -> x.com/LazyShivam' : line
+          
           return (
             <div 
-              key={index} 
+              key={isXLink ? 'xlink' : index} 
               className="line" 
               style={{
-                transform: isXLink ? 'none' : (corruptionPhase !== 'controlled' && Math.random() < 0.4 
-                  ? `translateX(${Math.random() * 40 - 20}px) rotate(${Math.random() * 10 - 5}deg) scaleX(${0.8 + Math.random() * 0.4})` 
-                  : 'none'),
-                fontSize: isXLink ? '14px' : (corruptionPhase === 'art' && Math.random() < 0.5 
-                  ? `${10 + Math.random() * 20}px` 
-                  : '14px'),
-                opacity: isXLink ? 1 : (corruptionPhase === 'art' ? 0.4 + Math.random() * 0.6 : 1),
-                filter: isXLink ? 'none' : (corruptionPhase === 'art' && Math.random() < 0.3 ? 'blur(1px)' : 'none')
+                transform: 'none', // Never move X link
+                fontSize: '14px', // Fixed size
+                opacity: 1, // Always visible
+                filter: 'none', // No blur
+                position: isXLink ? 'relative' : 'relative',
+                zIndex: isXLink ? 1000 : 1
               }}
             >
               {isXLink ? (
@@ -523,19 +535,29 @@ export default function Home() {
                   color: '#79b8ff', 
                   textDecoration: 'underline',
                   fontSize: '14px',
-                  fontWeight: 'normal'
+                  fontWeight: 'normal',
+                  display: 'inline-block'
                 }}>
-                  {line}
+                  {displayLine}
                 </a>
               ) : (
-                <span className="text">{line}</span>
+                <span className="text" style={{
+                  transform: corruptionPhase !== 'controlled' && Math.random() < 0.4 
+                    ? `translateX(${Math.random() * 40 - 20}px) rotate(${Math.random() * 10 - 5}deg) scaleX(${0.8 + Math.random() * 0.4})` 
+                    : 'none',
+                  fontSize: corruptionPhase === 'art' && Math.random() < 0.5 
+                    ? `${10 + Math.random() * 20}px` 
+                    : '14px',
+                  opacity: corruptionPhase === 'art' ? 0.4 + Math.random() * 0.6 : 1,
+                  filter: corruptionPhase === 'art' && Math.random() < 0.3 ? 'blur(1px)' : 'none'
+                }}>{line}</span>
               )}
             </div>
           )
         })}
         {isTyping && (
           <div className="line" style={{ transform: 'none' }}>
-            {currentText.includes('x.com/LazyShivam') ? (
+            {currentText.includes('x.com/LazyShivam') || currentText.includes('ask him') ? (
               <>
                 <a href="https://x.com/LazyShivam" target="_blank" rel="noopener noreferrer" style={{ 
                   color: '#79b8ff', 
@@ -543,7 +565,7 @@ export default function Home() {
                   fontSize: '14px',
                   fontWeight: 'normal'
                 }}>
-                  {currentText}
+                  {currentText.includes('x.com/LazyShivam') ? currentText : '> ask him -> x.com/LazyShivam'}
                 </a>
                 <span className="cursor" style={{ color: '#79b8ff' }}>_</span>
               </>
