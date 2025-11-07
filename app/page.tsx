@@ -8,6 +8,23 @@ const messages = [
   '> status: slightly better than 404',
 ]
 
+// Word alternatives - SFW meaningful replacements
+const wordAlternatives: Record<string, string[]> = {
+  'coming': ['arriving', 'approaching', 'reaching', 'nearby'],
+  'soon': ['shortly', 'quickly', 'fast', 'rapidly'],
+  'is': ['becomes', 'turns', 'seems', 'appears'],
+  'what': ['which', 'that', 'this', 'where'],
+  'time': ['moment', 'instant', 'period', 'duration'],
+  'anyway': ['regardless', 'however', 'still', 'yet'],
+  'will': ['shall', 'might', 'could', 'may'],
+  'come': ['arrive', 'reach', 'appear', 'emerge'],
+  'before': ['prior', 'earlier', 'ahead', 'preceding'],
+  'status': ['state', 'condition', 'situation', 'mode'],
+  'slightly': ['somewhat', 'rather', 'fairly', 'quite'],
+  'better': ['improved', 'superior', 'enhanced', 'upgraded'],
+  'than': ['compared', 'versus', 'against', 'over'],
+}
+
 // Corruption variants - mix of languages and gibberish
 const corruptionChars = {
   english: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789',
@@ -23,17 +40,49 @@ function getRandomChar(type: keyof typeof corruptionChars): string {
   return chars[Math.floor(Math.random() * chars.length)]
 }
 
-function corruptText(text: string, intensity: number): string {
-  return text
+function corruptWord(word: string): string {
+  const lowerWord = word.toLowerCase().replace(/[>.,!?]/g, '')
+  
+  // 30% chance to keep word correct or use meaningful alternative
+  if (Math.random() < 0.3) {
+    if (wordAlternatives[lowerWord] && Math.random() < 0.5) {
+      const alternatives = wordAlternatives[lowerWord]
+      const replacement = alternatives[Math.floor(Math.random() * alternatives.length)]
+      // Preserve original case and punctuation
+      if (word[0] === word[0].toUpperCase()) {
+        return replacement.charAt(0).toUpperCase() + replacement.slice(1)
+      }
+      return replacement
+    }
+    return word // Keep original word
+  }
+  
+  // 70% chance to corrupt
+  const types: (keyof typeof corruptionChars)[] = ['english', 'cyrillic', 'arabic', 'japanese', 'symbols', 'gibberish']
+  const randomType = types[Math.floor(Math.random() * types.length)]
+  
+  // Corrupt 30-50% of characters
+  return word
     .split('')
     .map((char) => {
-      if (char === ' ' || char === '>') return char
-      if (Math.random() < intensity) {
-        const types: (keyof typeof corruptionChars)[] = ['english', 'cyrillic', 'arabic', 'japanese', 'symbols', 'gibberish']
-        const randomType = types[Math.floor(Math.random() * types.length)]
+      if (char === ' ' || char === '>' || char === '.' || char === ',' || char === '!' || char === '?') return char
+      if (Math.random() < 0.4) {
         return getRandomChar(randomType)
       }
       return char
+    })
+    .join('')
+}
+
+function corruptText(text: string): string {
+  // Split by words (preserving spaces and punctuation)
+  const words = text.match(/(>|[^\s]+|\s+)/g) || []
+  
+  return words
+    .map((word) => {
+      // Skip spaces and prompt symbols
+      if (word.trim() === '' || word === '>') return word
+      return corruptWord(word)
     })
     .join('')
 }
@@ -58,7 +107,7 @@ export default function Home() {
     }
 
     const currentMessage = messages[currentLineIndex]
-    const typingSpeed = 35 // ms per character
+    const typingSpeed = 20 // ms per character (faster)
 
     if (currentText.length < currentMessage.length) {
       const timer = setTimeout(() => {
@@ -87,7 +136,7 @@ export default function Home() {
         prev.map((line) => {
           // Randomly decide if this line should corrupt (30% chance per cycle)
           if (Math.random() < 0.3) {
-            return corruptText(line, 0.3)
+            return corruptText(line)
           }
           return line
         })
