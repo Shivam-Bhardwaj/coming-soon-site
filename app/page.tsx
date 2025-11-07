@@ -492,7 +492,7 @@ export default function Home() {
               textDecoration: 'underline',
               fontSize: '14px'
             }}>
-              > ask him -> x.com/LazyShivam
+              {'> ask him -> x.com/LazyShivam'}
             </a>
           </div>
         )}
