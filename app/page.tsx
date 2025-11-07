@@ -119,6 +119,8 @@ export default function Home() {
   const renderBudgetRef = useRef(1.0) // 0.4–1.5 scales work per frame
   const frameTimeAvgRef = useRef(16)  // ms, smoothed
   const perfStatsRef = useRef<Record<string, { total: number; count: number; max: number }>>({})
+  const spreadThrottleRef = useRef(1)
+  const growthMapCapRef = useRef(32000)
 
   // Refs to avoid stale state in interval-driven biology updates
   const fungusGridRef = useRef<string[][]>([]);
@@ -648,21 +650,42 @@ export default function Home() {
     // Regenerate resources slowly - limit iterations
     const regenerateResources = () => {
       let count = 0
+      const limit = Math.max(200, Math.floor(600 * renderBudgetRef.current))
       resourceMap.forEach((resource, key) => {
-        if (count++ > 1000) return // Limit iterations
+        if (count++ > limit) return
         if (resource < 100) {
           resourceMap.set(key, Math.min(100, resource + 0.5))
         }
       })
     }
 
+    const pruneGrowthMap = (targetSize: number) => {
+      if (growthMap.size <= targetSize) return
+      const cellsNeeded = Math.ceil(Math.max(0, growthMap.size - targetSize) / 2)
+      const cells: string[] = []
+      growthMap.forEach((_, key) => {
+        if (cells.length >= cellsNeeded) return
+        if (!key.includes('_color')) {
+          cells.push(key)
+        }
+      })
+      cells.forEach(key => {
+        growthMap.delete(key)
+        growthMap.delete(key + '_color')
+      })
+    }
+
     // Spread growth - OPTIMIZED: Only process strong growth, limit iterations, 4-neighbors only
     const spreadGrowth = () => {
-      if (growthMap.size > 5000) return // Skip if too large
-      
+      const targetCap = Math.max(20000, Math.floor(growthMapCapRef.current * renderBudgetRef.current))
+      if (growthMap.size > targetCap) {
+        pruneGrowthMap(targetCap)
+      }
+
       const newGrowthMap = new Map(growthMap)
       let processed = 0
-      const maxProcess = Math.max(200, Math.floor(700 * renderBudgetRef.current)) // Adaptive budget
+      const throttle = Math.max(0.3, Math.min(1, spreadThrottleRef.current))
+      const maxProcess = Math.max(150, Math.floor(600 * renderBudgetRef.current * throttle))
       
       growthMap.forEach((value, key) => {
         if (processed++ > maxProcess) return
@@ -1061,7 +1084,15 @@ export default function Home() {
       // Spread growth organically
       const spreadStart = performance.now()
       spreadGrowth()
-      recordPerf('spreadGrowth', performance.now() - spreadStart)
+      const spreadDuration = performance.now() - spreadStart
+      recordPerf('spreadGrowth', spreadDuration)
+      if (spreadDuration > 8) {
+        spreadThrottleRef.current = Math.max(0.4, spreadThrottleRef.current * 0.85)
+        growthMapCapRef.current = Math.max(20000, growthMapCapRef.current - 2000)
+      } else if (spreadDuration < 4) {
+        spreadThrottleRef.current = Math.min(1, spreadThrottleRef.current * 1.02)
+        growthMapCapRef.current = Math.min(36000, growthMapCapRef.current + 500)
+      }
 
       // Render pixel data - OPTIMIZED: Single pass, limit iterations, batch operations
       const renderGrowthStart = performance.now()
@@ -1262,7 +1293,7 @@ export default function Home() {
       {showCorruption && perfSnapshot.length > 0 && (
         <div className="performance-overlay">
           <div className="perf-row">
-            budget {renderBudgetRef.current.toFixed(2)} | frame {frameTimeAvgRef.current.toFixed(1)}ms
+            budget {renderBudgetRef.current.toFixed(2)} | frame {frameTimeAvgRef.current.toFixed(1)}ms | spread {spreadThrottleRef.current.toFixed(2)} | cap {(growthMapCapRef.current / 1000).toFixed(1)}k
           </div>
           {perfSnapshot.map(({ name, avg, max }) => (
             <div className="perf-row" key={name}>
