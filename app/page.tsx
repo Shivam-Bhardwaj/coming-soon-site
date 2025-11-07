@@ -116,7 +116,16 @@ export default function Home() {
   const animationPhaseRef = useRef<'chaos' | 'antimony' | 'sb' | 'white' | 'circle' | 'explosion'>('chaos')
   const [antimonyText, setAntimonyText] = useState('antimony')
   const [circleRadius, setCircleRadius] = useState(0)
-  const [explosionLines, setExplosionLines] = useState<Array<{x: number, y: number, angle: number, color: string, progress: number}>>([])
+  const [explosionLines, setExplosionLines] = useState<Array<{
+    x: number, 
+    y: number, 
+    angle: number, 
+    color: string, 
+    progress: number,
+    speed: number,
+    curve: number,
+    spin: number
+  }>>([])
   const explosionCanvasRef = useRef<HTMLCanvasElement>(null)
   const ecosystemStateRef = useRef({
     clouds: 0,
@@ -327,23 +336,37 @@ export default function Home() {
         if (progress >= 1) {
           animationPhaseRef.current = 'explosion'
           setAnimationPhase('explosion')
-          // Initialize explosion lines - going to extreme edges
+          // Initialize explosion particles - like subatomic particles from a collider
           const centerX = window.innerWidth / 2
           const centerY = window.innerHeight / 2
-          const maxDist = Math.sqrt(window.innerWidth * window.innerWidth + window.innerHeight * window.innerHeight) / 2
-          const colors = ['#39ff14', '#ff1493', '#00ffff', '#ffb84d', '#ffff00', '#ff00ff', '#00ff00', '#ff0000', '#ffffff']
-          const lines: Array<{x: number, y: number, angle: number, color: string, progress: number}> = []
-          for (let i = 0; i < 300; i++) {
-            const angle = (Math.PI * 2 / 300) * i
-            lines.push({
+          const colors = ['#39ff14', '#ff1493', '#00ffff', '#ffb84d', '#ffff00', '#ff00ff', '#00ff00', '#ff0000', '#ffffff', '#ffd700']
+          const particles: Array<{
+            x: number, 
+            y: number, 
+            angle: number, 
+            color: string, 
+            progress: number,
+            speed: number,
+            curve: number,
+            spin: number
+          }> = []
+          
+          // Create particles with random angles, speeds, curves, and spins - like a particle collider
+          for (let i = 0; i < 400; i++) {
+            const baseAngle = Math.random() * Math.PI * 2
+            const angleVariation = (Math.random() - 0.5) * 0.5 // Random variation
+            particles.push({
               x: centerX,
               y: centerY,
-              angle,
+              angle: baseAngle + angleVariation,
               color: colors[Math.floor(Math.random() * colors.length)],
-              progress: 0
+              progress: 0,
+              speed: 0.5 + Math.random() * 1.5, // Variable speed - some fast, some slow
+              curve: (Math.random() - 0.5) * 4, // Curve factor for path bending
+              spin: (Math.random() - 0.5) * 0.3 // Spinning/spiraling motion
             })
           }
-          setExplosionLines(lines)
+          setExplosionLines(particles)
         }
         return
       }
@@ -359,13 +382,26 @@ export default function Home() {
           progress: progress
         })))
         
-        // After explosion, return to chaos phase so life can continue forming
+        // After explosion, transition particles into biological organisms
         if (progress >= 1) {
           animationPhaseRef.current = 'chaos'
           setAnimationPhase('chaos')
           setTerminalSuppressed(false)
           terminalSuppressedRef.current = false
-          // Reset explosion lines but keep biological growth going
+          
+          // Initialize biological grid from explosion particles' final positions
+          const cols = Math.floor(window.innerWidth / 6)
+          const rows = Math.floor(window.innerHeight / 12)
+          const initialGrid = Array(rows).fill(null).map(() => Array(cols).fill(' '))
+          setFungusGrid(initialGrid)
+          fungusGridRef.current = initialGrid
+          setBiologicalColonies([])
+          biologicalColoniesRef.current = []
+          const initialColorMap = new Map<string, GrowthType>()
+          setBiologicalColorMap(initialColorMap)
+          biologicalColorMapRef.current = initialColorMap
+          
+          // Reset explosion lines - they've become organisms
           setExplosionLines([])
           // Mark explosion as complete so we don't restart the sequence
           explosionCompleteTimeRef.current = elapsed
@@ -1480,18 +1516,48 @@ export default function Home() {
       const centerY = canvas.height / 2
       const maxDistance = Math.sqrt(canvas.width * canvas.width + canvas.height * canvas.height) / 2
 
-      explosionLines.forEach(line => {
-        const distance = line.progress * maxDistance
-        const endX = centerX + Math.cos(line.angle) * distance
-        const endY = centerY + Math.sin(line.angle) * distance
+      explosionLines.forEach(particle => {
+        // Each particle has its own speed, curve, and spin - like subatomic particles
+        const actualProgress = particle.progress * particle.speed
+        const distance = actualProgress * maxDistance
+        
+        // Apply curve and spin to create chaotic, non-symmetrical paths
+        const curveOffset = particle.curve * actualProgress * Math.PI
+        const spinOffset = particle.spin * actualProgress * Math.PI * 2
+        const effectiveAngle = particle.angle + curveOffset + spinOffset
+        
+        const endX = centerX + Math.cos(effectiveAngle) * distance
+        const endY = centerY + Math.sin(effectiveAngle) * distance
 
-        ctx.strokeStyle = line.color
-        ctx.lineWidth = 2
-        ctx.globalAlpha = 1 - line.progress * 0.3
+        // Draw particle as a glowing dot with trail
+        ctx.globalAlpha = 1 - actualProgress * 0.5
+        ctx.fillStyle = particle.color
+        ctx.shadowBlur = 8
+        ctx.shadowColor = particle.color
+        
+        // Particle dot
         ctx.beginPath()
-        ctx.moveTo(centerX, centerY)
-        ctx.lineTo(endX, endY)
-        ctx.stroke()
+        ctx.arc(endX, endY, 2 + (1 - actualProgress) * 2, 0, Math.PI * 2)
+        ctx.fill()
+        
+        // Short trail from center showing curved path
+        if (actualProgress > 0.05) {
+          const trailProgress = Math.max(0, actualProgress - 0.1)
+          const trailDistance = trailProgress * maxDistance
+          const trailAngle = particle.angle + particle.curve * trailProgress * Math.PI + particle.spin * trailProgress * Math.PI * 2
+          const trailX = centerX + Math.cos(trailAngle) * trailDistance
+          const trailY = centerY + Math.sin(trailAngle) * trailDistance
+          
+          ctx.strokeStyle = particle.color
+          ctx.lineWidth = 1.5
+          ctx.globalAlpha = (1 - actualProgress) * 0.6
+          ctx.beginPath()
+          ctx.moveTo(trailX, trailY)
+          ctx.lineTo(endX, endY)
+          ctx.stroke()
+        }
+        
+        ctx.shadowBlur = 0
       })
 
       ctx.globalAlpha = 1
