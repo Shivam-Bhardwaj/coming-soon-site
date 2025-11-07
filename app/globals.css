@@ -31,13 +31,18 @@ body {
   color: #ffffff;
 }
 
+.terminal {
+  max-width: 800px;
+  padding: 20px;
+}
+
 .line {
   font-size: 24px;
   font-weight: normal;
-  line-height: 1.5;
+  line-height: 1.8;
   display: flex;
   align-items: center;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 
 .text {
@@ -60,7 +65,7 @@ body {
 }
 
 .link {
-  margin-top: 40px;
+  margin-top: 30px;
   font-size: 14px;
 }
 
@@ -76,7 +81,10 @@ body {
 @media (max-width: 768px) {
   .line {
     font-size: 18px;
-    padding: 0 20px;
+  }
+  
+  .terminal {
+    padding: 20px;
   }
   
   .link {
