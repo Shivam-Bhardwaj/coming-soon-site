@@ -21,7 +21,7 @@ export default function Home() {
     }
 
     const currentMessage = messages[currentLineIndex]
-    const typingSpeed = 50 // ms per character
+    const typingSpeed = 15 // ms per character
 
     if (currentText.length < currentMessage.length) {
       const timer = setTimeout(() => {
@@ -35,7 +35,7 @@ export default function Home() {
         setDisplayedLines([...displayedLines, currentText])
         setCurrentText('')
         setCurrentLineIndex(currentLineIndex + 1)
-      }, 800)
+      }, 150)
 
       return () => clearTimeout(timer)
     }
