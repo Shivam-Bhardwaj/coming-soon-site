@@ -6,7 +6,6 @@ const messages = [
   '> coming soon is coming soon',
   '> what is time anyway, it will come before GTA 6',
   '> status: slightly better than 404',
-  '> estimated arrival: before heat death of universe',
 ]
 
 export default function Home() {

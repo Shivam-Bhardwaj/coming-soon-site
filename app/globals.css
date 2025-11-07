@@ -22,7 +22,7 @@ body {
   width: 100%;
   min-height: 100vh;
   padding: 20px;
-  color: #00ff41;
+  color: #ff8c00;
 }
 
 .terminal {
@@ -41,11 +41,11 @@ body {
 }
 
 .text {
-  color: #00ff41;
+  color: #ff8c00;
 }
 
 .cursor {
-  color: #00ff41;
+  color: #ff8c00;
   animation: blink 1s infinite;
   margin-left: 2px;
 }
