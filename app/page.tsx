@@ -113,6 +113,8 @@ export default function Home() {
   const [biologicalColonies, setBiologicalColonies] = useState<GrowthColony[]>([]);
   const [biologicalColorMap, setBiologicalColorMap] = useState<Map<string, GrowthType>>(new Map());
   const [perfSnapshot, setPerfSnapshot] = useState<PerfSnapshot[]>([]);
+  const ecosystemStateRef = useRef({ clouds: 0, apex: 0, wave: '-' })
+  const [ecosystemHUD, setEcosystemHUD] = useState(ecosystemStateRef.current)
   const backgroundCanvasRef = useRef<HTMLCanvasElement>(null);
 
   // Adaptive performance refs
@@ -154,6 +156,7 @@ export default function Home() {
       snapshot.sort((a, b) => b.avg - a.avg)
       setPerfSnapshot(snapshot.slice(0, 6))
       perfStatsRef.current = {}
+      setEcosystemHUD({ ...ecosystemStateRef.current })
     }, 1000)
     return () => clearInterval(interval)
   }, [showCorruption])
@@ -506,7 +509,7 @@ export default function Home() {
       vx: number
       vy: number
       size: number
-      type: 'spore' | 'mycelium' | 'insect' | 'slime' | 'beetle' | 'mite' | 'worm' | 'fly'
+      type: 'spore' | 'mycelium' | 'insect' | 'slime' | 'beetle' | 'mite' | 'worm' | 'fly' | 'apex'
       age: number
       color: string
       trail: { x: number; y: number; opacity: number }[]
@@ -514,12 +517,38 @@ export default function Home() {
       population: number // Track population of this type
       territory: number // Territory size
     }
+
+    interface NutrientCloud {
+      id: number
+      x: number
+      y: number
+      vx: number
+      vy: number
+      radius: number
+      strength: number
+      life: number
+    }
+
+    interface DecayWave {
+      axis: 'x' | 'y'
+      position: number
+      direction: 1 | -1
+      speed: number
+      width: number
+      cooldown: number
+      bornAt: number
+    }
     
     // Resource map - pixels as resources
     const resourceMap = new Map<string, number>() // Track resource availability per pixel
 
     const organisms: PixelOrganism[] = []
     let growthMap = new Map<string, number | string>() // Track growth intensity and colors per pixel
+    let nutrientClouds: NutrientCloud[] = []
+    let nextCloudId = 0
+    let decayWave: DecayWave | null = null
+    let lastCloudSpawn = Date.now()
+    let lastApexSpawn = Date.now()
 
     // Creepy color palette
     const colors = {
@@ -531,6 +560,7 @@ export default function Home() {
       mite: ['#9370db', '#ba55d3', '#da70d6'], // Purple
       worm: ['#ff6347', '#ff4500', '#ff7f50'], // Red-orange
       fly: ['#00ff7f', '#7fff00', '#adff2f'], // Yellow-green
+      apex: ['#ffffff', '#ffd700', '#fffae3'], // Bright predators
       decay: ['#4b0082', '#8b008b', '#9400d3'] // Purple decay
     }
 
@@ -547,23 +577,31 @@ export default function Home() {
     
     // Initialize organisms - optimized (population set after spawn)
     const spawnOrganism = (type: PixelOrganism['type'], x?: number, y?: number) => {
-      const baseSpeed = type === 'fly' ? 1.6 : type === 'beetle' ? 1.0 : type === 'worm' ? 0.5 : 0.8
+      const baseSpeed = type === 'fly' ? 1.6
+        : type === 'beetle' ? 1.0
+        : type === 'worm' ? 0.5
+        : type === 'apex' ? 1.5
+        : 0.8
       const resourceNeeds: Record<string, number> = {
         spore: 5, mycelium: 8, insect: 10, slime: 12,
-        beetle: 15, mite: 3, worm: 7, fly: 6
+        beetle: 15, mite: 3, worm: 7, fly: 6, apex: 25
       }
+      const size = type === 'beetle' ? 2 + Math.random() * 2
+        : type === 'mite' ? 0.5 + Math.random()
+        : type === 'apex' ? 3 + Math.random() * 1.5
+        : 1 + Math.random() * 2
       
       organisms.push({
         x: x ?? Math.random() * canvas.width,
         y: y ?? Math.random() * canvas.height,
         vx: (Math.random() - 0.5) * baseSpeed,
         vy: (Math.random() - 0.5) * baseSpeed,
-        size: type === 'beetle' ? 2 + Math.random() * 2 : type === 'mite' ? 0.5 + Math.random() : 1 + Math.random() * 2,
+        size,
         type,
         age: 0,
         color: colors[type][Math.floor(Math.random() * colors[type].length)],
         trail: [],
-        energy: 50 + Math.random() * 50,
+        energy: type === 'apex' ? 120 + Math.random() * 80 : 50 + Math.random() * 50,
         population: 0, // Will be set by updatePopulationCounts
         territory: resourceNeeds[type] || 5
       })
@@ -698,6 +736,124 @@ export default function Home() {
       }
     }
 
+    const createDecayWave = (): DecayWave => ({
+      axis: Math.random() < 0.5 ? 'x' : 'y',
+      position: Math.random() < 0.5 ? 0 : (Math.random() * (Math.random() < 0.5 ? canvas.width : canvas.height)),
+      direction: Math.random() < 0.5 ? -1 : 1,
+      speed: 0.8 + Math.random() * 0.6,
+      width: 8 + Math.random() * 6,
+      cooldown: 6000 + Math.random() * 6000,
+      bornAt: Date.now()
+    })
+
+    const spawnNutrientCloud = () => {
+      if (nutrientClouds.length >= 5) return
+      nutrientClouds.push({
+        id: nextCloudId++,
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        vx: (Math.random() - 0.5) * 0.4,
+        vy: (Math.random() - 0.5) * 0.4,
+        radius: 60 + Math.random() * 80,
+        strength: 15 + Math.random() * 20,
+        life: 7000 + Math.random() * 6000
+      })
+      lastCloudSpawn = Date.now()
+    }
+
+    const updateNutrientClouds = () => {
+      const start = performance.now()
+      nutrientClouds = nutrientClouds.filter(cloud => {
+        cloud.x += cloud.vx
+        cloud.y += cloud.vy
+        cloud.life -= 16
+        if (cloud.x < 0 || cloud.x > canvas.width) cloud.vx *= -1
+        if (cloud.y < 0 || cloud.y > canvas.height) cloud.vy *= -1
+
+        const gridStep = 40
+        for (let dx = -cloud.radius; dx <= cloud.radius; dx += gridStep) {
+          for (let dy = -cloud.radius; dy <= cloud.radius; dy += gridStep) {
+            const px = Math.floor(cloud.x + dx)
+            const py = Math.floor(cloud.y + dy)
+            if (px < 0 || px >= canvas.width || py < 0 || py >= canvas.height) continue
+            const dist = Math.sqrt(dx * dx + dy * dy)
+            if (dist > cloud.radius) continue
+            const boost = Math.max(0, (cloud.radius - dist) / cloud.radius) * cloud.strength
+            const key = `${Math.floor(px / 20) * 20},${Math.floor(py / 20) * 20}`
+            const current = resourceMap.get(key) || 50
+            resourceMap.set(key, Math.min(120, current + boost * 0.05))
+          }
+        }
+        return cloud.life > 0
+      })
+      recordPerf('nutrientClouds', performance.now() - start)
+    }
+
+    const getCloudVector = (x: number, y: number): { dx: number; dy: number; dist: number } | null => {
+      if (nutrientClouds.length === 0) return null
+      let best: { dx: number; dy: number; dist: number } | null = null
+      nutrientClouds.forEach(cloud => {
+        const dx = cloud.x - x
+        const dy = cloud.y - y
+        const distSq = dx * dx + dy * dy
+        if (distSq < (cloud.radius * cloud.radius)) {
+          const dist = Math.max(1, Math.sqrt(distSq))
+          const weight = (cloud.radius - dist) / cloud.radius
+          if (!best || dist < best.dist) {
+            best = { dx: dx / dist * weight, dy: dy / dist * weight, dist }
+          }
+        }
+      })
+      return best
+    }
+
+    const maybeSpawnApex = () => {
+      const now = Date.now()
+      if (now - lastApexSpawn < 12000) return
+      const apexCount = organisms.filter(o => o.type === 'apex').length
+      if (apexCount >= 2) return
+      if (Math.random() < 0.004) {
+        spawnOrganism('apex')
+        lastApexSpawn = now
+      }
+    }
+
+    const applyDecayWave = () => {
+      if (!decayWave) return
+      const wave = decayWave
+      const start = performance.now()
+      let processed = 0
+      const limit = 2000
+      const axisLimit = wave.axis === 'x' ? canvas.width : canvas.height
+      growthMap.forEach((value, key) => {
+        if (processed > limit) return
+        if (key.includes('_color')) return
+        const [x, y] = key.split(',').map(Number)
+        const dist = wave.axis === 'x' ? Math.abs(x - wave.position) : Math.abs(y - wave.position)
+        if (dist <= wave.width) {
+          const intensity = typeof value === 'number' ? value : 0
+          const reduced = intensity * 0.84
+          if (reduced < 4) {
+            growthMap.delete(key)
+            growthMap.delete(key + '_color')
+          } else {
+            growthMap.set(key, reduced)
+          }
+          processed++
+        }
+      })
+      recordPerf('decayWave', performance.now() - start)
+      wave.position += wave.direction * wave.speed
+      if (wave.position < -wave.width || wave.position > axisLimit + wave.width) {
+        decayWave = null
+      }
+      if (!decayWave) {
+        decayWave = createDecayWave()
+      }
+    }
+
+    decayWave = createDecayWave()
+
     // Spread growth - OPTIMIZED: Only process strong growth, limit iterations, 4-neighbors only
     const spreadGrowth = () => {
       const targetCap = Math.max(26000, Math.floor(growthMapCapRef.current * renderBudgetRef.current))
@@ -807,6 +963,12 @@ export default function Home() {
       const populationStart = performance.now()
       updatePopulationCounts()
       recordPerf('populationCounts', performance.now() - populationStart)
+
+      if (Date.now() - lastCloudSpawn > 5000 && Math.random() < 0.15) {
+        spawnNutrientCloud()
+      }
+      updateNutrientClouds()
+      maybeSpawnApex()
       
       // Spatial partitioning for organism interactions - O(n) instead of O(n²)
       const gridSize = 40
@@ -827,7 +989,7 @@ export default function Home() {
       const organismsToRemove: number[] = []
       const competitionStrength: Record<string, number> = {
         beetle: 2, fly: 0.5, mite: 0.3, worm: 1,
-        insect: 1.2, slime: 1.5, spore: 0.8, mycelium: 1.3
+        insect: 1.2, slime: 1.5, spore: 0.8, mycelium: 1.3, apex: 3
       }
       
       for (let idx = 0; idx < organisms.length; idx++) {
@@ -836,7 +998,7 @@ export default function Home() {
         
         // Movement - optimized
         org.age++
-        org.energy -= 0.12
+        org.energy -= org.type === 'apex' ? 0.22 : 0.12
         
         const moveParams: Record<string, [number, number]> = {
           fly: [0.5, 0.94],
@@ -850,6 +1012,12 @@ export default function Home() {
         org.vy += (Math.random() - 0.5) * moveStrength
         org.vx *= friction
         org.vy *= friction
+
+        const cloudVector = getCloudVector(org.x, org.y)
+        if (cloudVector) {
+          org.vx += cloudVector.dx * (org.type === 'apex' ? 0.25 : 0.12)
+          org.vy += cloudVector.dy * (org.type === 'apex' ? 0.25 : 0.12)
+        }
 
         // Boundary behavior
         if (org.x < 0 || org.x > canvas.width) org.vx *= -1
@@ -904,6 +1072,19 @@ export default function Home() {
                     if (dist < 3 && Math.random() < 0.15 && !organismsToRemove.includes(otherIdx)) {
                       org.energy = Math.min(100, org.energy + 10)
                       organismsToRemove.push(otherIdx)
+                    }
+                  }
+                  if (org.type === 'apex' && other.type !== 'apex') {
+                    if (dist < 12 && Math.random() < 0.4 && !organismsToRemove.includes(otherIdx)) {
+                      org.energy = Math.min(220, org.energy + 50)
+                      organismsToRemove.push(otherIdx)
+                    } else if (dist < 80) {
+                      org.vx += (dx / dist) * 0.4
+                      org.vy += (dy / dist) * 0.4
+                    }
+                  } else if (other.type === 'apex' && org.type !== 'apex') {
+                    if (dist < 15) {
+                      org.energy -= 0.4
                     }
                   }
                 }
@@ -1043,6 +1224,21 @@ export default function Home() {
               )
             }
           }
+
+          if (org.type === 'apex') {
+            growPixel(org.x, org.y, 2.0, '#ffd700', org)
+            for (let i = 0; i < 10; i++) {
+              const angle = Math.random() * Math.PI * 2
+              const dist = 2 + Math.random() * 6
+              growPixel(
+                org.x + Math.cos(angle) * dist,
+                org.y + Math.sin(angle) * dist,
+                0.8,
+                '#ffffff',
+                org
+              )
+            }
+          }
         }
 
 
@@ -1056,7 +1252,8 @@ export default function Home() {
           beetle: 40,
           mite: 150,
           worm: 50,
-          fly: 90
+          fly: 90,
+          apex: 3
         }
         
         const canReproduce = 
@@ -1067,7 +1264,8 @@ export default function Home() {
         
         // Reproduction rates vary by type and conditions
         let reproductionRate = 0
-        if (org.type === 'mite') reproductionRate = canReproduce ? 0.04 : 0
+        if (org.type === 'apex') reproductionRate = 0
+        else if (org.type === 'mite') reproductionRate = canReproduce ? 0.04 : 0
         else if (org.type === 'fly') reproductionRate = canReproduce ? 0.03 : 0
         else if (org.type === 'beetle') reproductionRate = canReproduce && population < 20 ? 0.02 : 0
         else reproductionRate = canReproduce ? 0.015 : 0
@@ -1084,15 +1282,21 @@ export default function Home() {
         }
 
         // Mark for death
+        const maxAge = org.type === 'apex' ? 1200 : 2000
         const shouldDie = 
           org.energy <= 0 || 
-          org.age > 2000 ||
-          (org.age > 1000 && org.energy < 20) ||
+          org.age > maxAge ||
+          (org.type !== 'apex' && org.age > 1000 && org.energy < 20) ||
+          (org.type === 'apex' && org.age > 800 && org.energy < 60) ||
           (population > (maxPopulation[org.type] || 50) && org.energy < 30)
         
         if (shouldDie && Math.random() < 0.01 && !organismsToRemove.includes(idx)) {
           organismsToRemove.push(idx)
-          setResource(org.x, org.y, localResource + 10)
+          if (org.type === 'apex') {
+            setResource(org.x, org.y, localResource + 40)
+          } else {
+            setResource(org.x, org.y, localResource + 10)
+          }
         }
       }
       
@@ -1103,6 +1307,13 @@ export default function Home() {
         }
       })
       recordPerf('organismLoop', performance.now() - organismsStart)
+
+      const apexCount = organisms.reduce((count, org) => count + (org.type === 'apex' ? 1 : 0), 0)
+      ecosystemStateRef.current = {
+        clouds: nutrientClouds.length,
+        apex: apexCount,
+        wave: decayWave ? `${decayWave.axis}:${Math.round(decayWave.position)}` : '-'
+      }
 
       // Spread growth organically
       const spreadStart = performance.now()
@@ -1119,6 +1330,7 @@ export default function Home() {
       const ambientStart = performance.now()
       ensureAmbientGrowth(Math.max(26000, Math.floor(growthMapCapRef.current * renderBudgetRef.current)))
       recordPerf('ambientSeeding', performance.now() - ambientStart)
+      applyDecayWave()
 
       // Render pixel data - OPTIMIZED: Single pass, limit iterations, batch operations
       const renderGrowthStart = performance.now()
@@ -1320,6 +1532,9 @@ export default function Home() {
         <div className="performance-overlay">
           <div className="perf-row">
             budget {renderBudgetRef.current.toFixed(2)} | frame {frameTimeAvgRef.current.toFixed(1)}ms | spread {spreadThrottleRef.current.toFixed(2)} | cap {(growthMapCapRef.current / 1000).toFixed(1)}k
+          </div>
+          <div className="perf-row">
+            clouds {ecosystemHUD.clouds} | apex {ecosystemHUD.apex} | wave {ecosystemHUD.wave}
           </div>
           {perfSnapshot.map(({ name, avg, max }) => (
             <div className="perf-row" key={name}>
