@@ -661,23 +661,46 @@ export default function Home() {
 
     const pruneGrowthMap = (targetSize: number) => {
       if (growthMap.size <= targetSize) return
-      const cellsNeeded = Math.ceil(Math.max(0, growthMap.size - targetSize) / 2)
-      const cells: string[] = []
-      growthMap.forEach((_, key) => {
-        if (cells.length >= cellsNeeded) return
-        if (!key.includes('_color')) {
-          cells.push(key)
+      const cellsNeeded = Math.ceil(Math.max(0, growthMap.size - targetSize))
+      const lowIntensity: string[] = []
+      const fallback: string[] = []
+      growthMap.forEach((value, key) => {
+        if (lowIntensity.length >= cellsNeeded && fallback.length >= cellsNeeded) return
+        if (key.includes('_color')) return
+        const intensity = typeof value === 'number' ? value : 0
+        if (intensity < 40 && lowIntensity.length < cellsNeeded) {
+          lowIntensity.push(key)
+        } else if (fallback.length < cellsNeeded) {
+          fallback.push(key)
         }
       })
-      cells.forEach(key => {
+      const targets = lowIntensity.concat(fallback).slice(0, cellsNeeded)
+      targets.forEach(key => {
         growthMap.delete(key)
         growthMap.delete(key + '_color')
       })
     }
 
+    const ensureAmbientGrowth = (targetCap: number) => {
+      if (growthMap.size > targetCap * 0.55) return
+      const deficit = Math.max(0, targetCap * 0.55 - growthMap.size)
+      const seeds = Math.min(300, Math.floor(deficit / 60))
+      if (seeds <= 0) return
+      const palette = ['#39ff14', '#ff1493', '#00ffff', '#ffb84d', '#ffff00']
+      for (let i = 0; i < seeds; i++) {
+        const x = Math.floor(Math.random() * canvas.width)
+        const y = Math.floor(Math.random() * canvas.height)
+        const key = `${x},${y}`
+        if (!growthMap.has(key)) {
+          growthMap.set(key, 30 + Math.random() * 90)
+          growthMap.set(key + '_color', palette[Math.floor(Math.random() * palette.length)])
+        }
+      }
+    }
+
     // Spread growth - OPTIMIZED: Only process strong growth, limit iterations, 4-neighbors only
     const spreadGrowth = () => {
-      const targetCap = Math.max(20000, Math.floor(growthMapCapRef.current * renderBudgetRef.current))
+      const targetCap = Math.max(26000, Math.floor(growthMapCapRef.current * renderBudgetRef.current))
       if (growthMap.size > targetCap) {
         pruneGrowthMap(targetCap)
       }
@@ -685,7 +708,7 @@ export default function Home() {
       const newGrowthMap = new Map(growthMap)
       let processed = 0
       const throttle = Math.max(0.3, Math.min(1, spreadThrottleRef.current))
-      const maxProcess = Math.max(150, Math.floor(600 * renderBudgetRef.current * throttle))
+      const maxProcess = Math.max(250, Math.floor(750 * renderBudgetRef.current * throttle))
       
       growthMap.forEach((value, key) => {
         if (processed++ > maxProcess) return
@@ -1093,12 +1116,15 @@ export default function Home() {
         spreadThrottleRef.current = Math.min(1, spreadThrottleRef.current * 1.02)
         growthMapCapRef.current = Math.min(36000, growthMapCapRef.current + 500)
       }
+      const ambientStart = performance.now()
+      ensureAmbientGrowth(Math.max(26000, Math.floor(growthMapCapRef.current * renderBudgetRef.current)))
+      recordPerf('ambientSeeding', performance.now() - ambientStart)
 
       // Render pixel data - OPTIMIZED: Single pass, limit iterations, batch operations
       const renderGrowthStart = performance.now()
       const imageData = ctx.createImageData(canvas.width, canvas.height)
       let renderCount = 0
-      const baseMaxRender = 7000
+      const baseMaxRender = 11000
       const maxRender = Math.max(1500, Math.floor(baseMaxRender * renderBudgetRef.current))
       const time = Date.now() / 1000
       
