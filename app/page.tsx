@@ -359,6 +359,8 @@ export default function Home() {
     if (!showCorruption) return
 
     const startTime = Date.now()
+    let corruptionPhase: 'controlled' | 'chaos' | 'art' = 'controlled';
+
 
     const interval = setInterval(() => {
       // Use a sine wave for a smooth 0 -> 1 -> 0 oscillation over ~12 seconds
@@ -367,27 +369,26 @@ export default function Home() {
       setPhaseIntensity(intensity)
 
       // Determine phase based on intensity
-      let currentPhase: 'controlled' | 'chaos' | 'art' = 'controlled'
-      if (intensity > 0.4) currentPhase = 'chaos'
-      if (intensity > 0.8) currentPhase = 'art'
+      if (intensity > 0.8) {
+        corruptionPhase = 'art';
+      } else if (intensity > 0.4) {
+        corruptionPhase = 'chaos';
+      } else {
+        corruptionPhase = 'controlled';
+      }
       
       setCorruptedLines((prev) => {
-        let linesToCorrupt = [...prev]
+        let linesToCorrupt = [...messages] // Start from original messages for stability
 
-        if (currentPhase === 'controlled') {
+        if (corruptionPhase === 'controlled') {
           return linesToCorrupt.map((line) => {
             // Fade out corruption as intensity drops
-            if (Math.random() < (1 - intensity) * 0.5) {
+            if (Math.random() < intensity * 0.3) {
               return controlledCorruption(line, false)
-            }
-            // Slowly resolve back to original
-            if(Math.random() < (1 - intensity) * 0.1) {
-                const originalIndex = messages.findIndex(m => m.startsWith(line.substring(0, 10)));
-                if(originalIndex !== -1) return messages[originalIndex];
             }
             return line
           })
-        } else if (currentPhase === 'chaos') {
+        } else if (corruptionPhase === 'chaos') {
           if (Math.random() < intensity * 0.2) {
             const newLine = Array(Math.floor(Math.random() * 30)).fill(0)
               .map(() => getRandomExtendedChar()).join('')
@@ -401,10 +402,10 @@ export default function Home() {
             return line
           }).slice(-15)
         } else { // Art phase
-          if (Math.random() < intensity * 0.5) {
+          if (Math.random() < intensity) {
             setBackgroundArt(generateBeautifulPattern())
           }
-          if (Math.random() < intensity * 0.4) {
+          if (Math.random() < intensity * 0.6) {
             linesToCorrupt.push(...fullScreenPatterns[Math.floor(Math.random() * fullScreenPatterns.length)].split('\n'))
           }
           
@@ -457,20 +458,20 @@ export default function Home() {
         position: 'relative',
         zIndex: 1
       }}>
-        {(showCorruption ? corruptedLines : displayedLines).map((line, index) => (
+        {(!showCorruption ? displayedLines : corruptedLines).map((line, index) => (
           <div 
             key={index} 
             className="line"
             style={{
               // All chaotic styles are applied here now
-              transform: corruptedLines.length > 0 && corruptedLines[0].includes('x.com/LazyShivam') && Math.random() < phaseIntensity * 0.5 
+              transform: showCorruption && Math.random() < phaseIntensity * 0.5 
                 ? `translateX(${(Math.random() * 40 - 20) * phaseIntensity}px) rotate(${(Math.random() * 10 - 5) * phaseIntensity}deg)` 
                 : 'none',
-              fontSize: corruptedLines.length > 0 && corruptedLines[0].includes('x.com/LazyShivam') && Math.random() < phaseIntensity
+              fontSize: showCorruption && phaseIntensity > 0.8 && Math.random() < phaseIntensity
                 ? `${10 + Math.random() * 20}px` 
                 : '14px',
-              opacity: corruptedLines.length > 0 && corruptedLines[0].includes('x.com/LazyShivam') ? 0.4 + Math.random() * 0.6 : 1,
-              filter: corruptedLines.length > 0 && corruptedLines[0].includes('x.com/LazyShivam') && Math.random() < phaseIntensity * 0.4 ? 'blur(1.5px)' : 'none'
+              opacity: showCorruption && phaseIntensity > 0.8 ? 0.4 + Math.random() * 0.6 : 1,
+              filter: showCorruption && phaseIntensity > 0.8 && Math.random() < phaseIntensity * 0.4 ? 'blur(1.5px)' : 'none'
             }}
           >
             <span className="text">{line}</span>
